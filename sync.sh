@@ -45,14 +45,21 @@ user = ${WEBDAV_USERNAME}
 pass = ${RCLONE_PASSWORD}
 EOF
 
-# Ensure proper permissions for the directory to be zipped
-echo "Setting permissions for the directory to be zipped..."
-chmod -R 755 "$DATA_DIR"
+# Create a temporary directory for processing
+TEMP_DIR=$(mktemp -d)
+
+# Copy the data directory to the temporary directory
+echo "Copying data directory to temporary location..."
+cp -r "$DATA_DIR" "$TEMP_DIR/data"
+
+# Ensure proper permissions for the copied directory
+echo "Setting permissions for the copied directory..."
+chmod -R 755 "$TEMP_DIR/data"
 
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
     # Create a password-protected zip file
     echo "Creating encrypted zip file..."
-    7z a -p"$ENCRYPTION_PASSWORD" "$ZIP_FILE" "$DATA_DIR"
+    7z a -p"$ENCRYPTION_PASSWORD" "$ZIP_FILE" "$TEMP_DIR/data"
 
     # Ensure proper permissions for the zip file
     echo "Setting permissions for the encrypted zip file..."
@@ -63,13 +70,13 @@ if [[ "$USE_ENCRYPTION" == "true" ]]; then
     rclone copy "$ZIP_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR" --config "$RCLONE_CONFIG_FILE"
 
     # Clean up
-    rm -f "$ZIP_FILE" "$RCLONE_CONFIG_FILE"
+    rm -rf "$TEMP_DIR" "$ZIP_FILE" "$RCLONE_CONFIG_FILE"
 
     echo "Sync complete."
 else
     # Create an unencrypted zip file
     echo "Creating unencrypted zip file..."
-    7z a "$ZIP_FILE" "$DATA_DIR"
+    7z a "$ZIP_FILE" "$TEMP_DIR/data"
 
     # Ensure proper permissions for the zip file
     echo "Setting permissions for the unencrypted zip file..."
@@ -80,7 +87,7 @@ else
     rclone copy "$ZIP_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR" --config "$RCLONE_CONFIG_FILE"
 
     # Clean up
-    rm -f "$ZIP_FILE" "$RCLONE_CONFIG_FILE"
+    rm -rf "$TEMP_DIR" "$ZIP_FILE" "$RCLONE_CONFIG_FILE"
 
     echo "Sync complete."
 fi

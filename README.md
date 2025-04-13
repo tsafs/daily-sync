@@ -37,7 +37,7 @@ Run the container in production mode with the following command:
 ```bash
 docker run -d \
     --name webdav-sync \
-    -v /path/to/your/data:/data \
+    -v /path/to/your/data:/data:ro \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
@@ -56,7 +56,7 @@ Run the container in debug mode to test the sync process manually. This effectiv
 
 ```bash
 docker run --rm \
-    -v ./test_data:/data \
+    -v ./test_data:/data:ro \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
@@ -78,7 +78,7 @@ services:
     image: ghcr.io/tsafs/webdav-daily-sync:latest
     container_name: webdav-daily-sync
     volumes:
-      - /path/to/your/data:/data
+      - /path/to/your/data:/data:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
@@ -127,7 +127,7 @@ To use the host's timezone, you can mount the `/etc/localtime` and `/etc/timezon
 ```bash
 docker run -d \
     --name webdav-sync \
-    -v /path/to/your/data:/data \
+    -v /path/to/your/data:/data:ro \
     -v /etc/localtime:/etc/localtime:ro \
     -v /etc/timezone:/etc/timezone:ro \
     ...
@@ -142,7 +142,7 @@ If you explicitly set the `TIMEZONE` variable, this ensures that the container u
 ```bash
 docker run -d \
     --name webdav-sync \
-    -v /path/to/your/data:/data \
+    -v /path/to/your/data:/data:ro \
     ...
     -e TIMEZONE="Europe/Berlin" \
     ghcr.io/tsafs/webdav-daily-sync:latest
