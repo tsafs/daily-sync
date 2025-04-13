@@ -45,10 +45,18 @@ user = ${WEBDAV_USERNAME}
 pass = ${RCLONE_PASSWORD}
 EOF
 
+# Ensure proper permissions for the directory to be zipped
+echo "Setting permissions for the directory to be zipped..."
+chmod -R 755 "$DATA_DIR"
+
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
     # Create a password-protected zip file
     echo "Creating encrypted zip file..."
     7z a -p"$ENCRYPTION_PASSWORD" "$ZIP_FILE" "$DATA_DIR"
+
+    # Ensure proper permissions for the zip file
+    echo "Setting permissions for the encrypted zip file..."
+    chmod 644 "$ZIP_FILE"
 
     # Upload the zip file to WebDAV
     echo "Uploading encrypted zip file to WebDAV..."
@@ -59,9 +67,13 @@ if [[ "$USE_ENCRYPTION" == "true" ]]; then
 
     echo "Sync complete."
 else
-    # Create a password-protected zip file
+    # Create an unencrypted zip file
     echo "Creating unencrypted zip file..."
     7z a "$ZIP_FILE" "$DATA_DIR"
+
+    # Ensure proper permissions for the zip file
+    echo "Setting permissions for the unencrypted zip file..."
+    chmod 644 "$ZIP_FILE"
 
     # Upload the zip file to WebDAV
     echo "Uploading unencrypted zip file to WebDAV..."
