@@ -25,7 +25,7 @@ jobs:
 
       # Debugging
       - name: Print username
-        run: echo "Docker username: ${{ secrets.DOCKER_USERNAME }}"
+        run: echo "Docker username ${{ secrets.DOCKER_USERNAME }}"
         env:
           DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
 
