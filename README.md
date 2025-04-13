@@ -10,10 +10,10 @@ WebDAV Daily Sync is a lightweight solution for syncing files to a WebDAV server
 
 ## Docker Hub
 
-This Docker image is available on Docker Hub under the tag `sebastianfa57/webdav-daily-sync:1.0.0`. You can pull it directly using:
+This Docker image is available on Docker Hub under the tag `ghcr.io/tsafs/webdav-daily-sync:latest`. You can pull it directly using:
 
 ```bash
-docker pull sebastianfa57/webdav-daily-sync:1.0.0
+docker pull ghcr.io/tsafs/webdav-daily-sync:latest
 ```
 
 ## Prerequisites
@@ -47,7 +47,7 @@ docker run -d \
     -e CRON_TIME="<time>" \
     -e CRON_DAYS="<days>" \
     -e TIMEZONE="Europe/Berlin" \
-    sebastianfa57/webdav-daily-sync:1.0.0
+    ghcr.io/tsafs/webdav-daily-sync:latest
 ```
 
 ### Debug Mode
@@ -65,7 +65,7 @@ docker run --rm \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e DEBUG=true \
-    sebastianfa57/webdav-daily-sync:1.0.0
+    ghcr.io/tsafs/webdav-daily-sync:latest
 ```
 
 ## Run the Container with Docker Compose
@@ -76,11 +76,13 @@ Create a `docker-compose.yml` file with the following content:
 version: '3.8'
 services:
   webdav-sync:
-    image: sebastianfa57/webdav-daily-sync:1.0.0
-    container_name: webdav-sync
+    image: ghcr.io/tsafs/webdav-daily-sync:latest
+    container_name: webdav-daily-sync
     privileged: true
     volumes:
       - /path/to/your/data:/data
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
     environment:
       WEBDAV_URL: "https://<webdav-host>/remote.php/dav/files/<username>/<folder>"
       WEBDAV_USERNAME: "<username>"
@@ -136,7 +138,7 @@ docker run -d \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e CRON_TIME="<time>" \
     -e CRON_DAYS="<days>" \
-    sebastianfa57/webdav-daily-sync:1.0.0
+    ghcr.io/tsafs/webdav-daily-sync:latest
 ```
 
 This approach works on most Linux distributions that use `/etc/localtime` and `/etc/timezone` for timezone configuration. Note that this method is not supported on systems like macOS or Windows, as they do not use these files for timezone management.
@@ -157,10 +159,51 @@ docker run -d \
     -e CRON_TIME="<time>" \
     -e CRON_DAYS="<days>" \
     -e TIMEZONE="Europe/Berlin" \
-    sebastianfa57/webdav-daily-sync:1.0.0
+    ghcr.io/tsafs/webdav-daily-sync:latest
 ```
 
 Setting the `TIMEZONE` variable to a UTC-based value (e.g., `UTC`) ensures that the container operates without being affected by daylight saving time (DST) changes, providing consistent scheduling behavior.
+
+## Contribution Guidelines
+
+I welcome contributions to the WebDAV Daily Sync project! To contribute, please follow these steps:
+
+1. **Fork the Repository**: Create a fork of this repository on GitHub.
+2. **Create a Branch**: Create a new branch for your feature or bug fix. Use a descriptive name for the branch (e.g., `feature/add-logging` or `bugfix/fix-sync-issue`).
+3. **Make Changes**: Implement your changes in the new branch. Ensure your code adheres to the project's coding standards and is well-documented.
+4. **Test Your Changes**: Thoroughly test your changes to ensure they work as expected and do not introduce regressions.
+5. **Submit a Pull Request (PR)**: Open a pull request to the `main` branch of this repository. Provide a clear description of your changes and the problem they solve.
+
+### Reporting Issues
+
+If you encounter a bug or have a feature request, please open an issue on GitHub. Provide as much detail as possible to help me understand and address the issue.
+
+## Versioning
+
+This project uses a custom versioning format stored in the `version.txt` file. The version format is:
+
+```
+YYYY-MM-DD-Index
+```
+
+- `YYYY-MM-DD`: The release date in the format year-month-day.
+- `Index`: A numeric index starting at `0` for the first release of the day. If multiple releases occur on the same day, increment the index (e.g., `2025-04-13-0`, `2025-04-13-1`).
+
+### Example
+
+If the first release of the day is on April 13, 2025, the version would be:
+
+```
+2025-04-13-0
+```
+
+If a second release is made on the same day, the version would be:
+
+```
+2025-04-13-1
+```
+
+The `version.txt` file is located in the root directory of the project and should be updated with each release.
 
 ## License
 
@@ -168,4 +211,4 @@ Copyright (c) 2025, Sebastian Fast
 All rights reserved.
 
 This source code is licensed under the GPL-style license found in the
-LICENSE file in the root directory of this source tree. 
+LICENSE file in the root directory of this source tree.
