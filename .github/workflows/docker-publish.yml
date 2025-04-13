@@ -36,11 +36,11 @@ jobs:
         run: |
           docker build \
             --build-arg VERSION=$VERSION \
-            -t ${{ secrets.DOCKER_USERNAME }}/webdav-daily-sync:$VERSION \
-            -t ${{ secrets.DOCKER_USERNAME }}/webdav-daily-sync:latest .
+            -t ghcr.io/tsafs/webdav-daily-sync:$VERSION \
+            -t ghcr.io/tsafs/webdav-daily-sync:latest .
 
       # Push both Docker image tags to Docker Hub
       - name: Push Docker image
         run: |
-          docker push ${{ secrets.DOCKER_USERNAME }}/webdav-daily-sync:$VERSION
-          docker push ${{ secrets.DOCKER_USERNAME }}/webdav-daily-sync:latest
+          docker push ghcr.io/tsafs/webdav-daily-sync:$VERSION
+          docker push ghcr.io/tsafs/webdav-daily-sync:latest
