@@ -105,7 +105,7 @@ docker-compose up -d
 | `WEBDAV_URL`     | URL of the WebDAV server.                                                          | None          |
 | `WEBDAV_USERNAME`| Username for the WebDAV server.                                                    | None          |
 | `WEBDAV_PASSWORD`| Password for the WebDAV server.                                                    | None          |
-| `WEBDAV_TARGET_DIR`| Target directory in which the zip of the mounted volume is stored.               | None          |
+| `WEBDAV_TARGET_DIR`| Target directory in which the zip of the mounted volume is stored.               | `/data`          |
 | `USE_ENCRYPTION` | Whether to encrypt the files before syncing (`true` or `false`).                   | `true`        |
 | `ENCRYPTION_PASSWORD`   | Password for encrypting the zip file. Required if `USE_ENCRYPTION` is true. | None          |
 | `CRON_TIME`      | Cron schedule time (e.g., `0 2` for 2:00 AM, `30 22` for 22:30).                   | `0 2`         |
