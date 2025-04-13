@@ -42,6 +42,7 @@ docker run -d \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
+    -e WEBDAV_TARGET_DIR="<target-directory>" \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e CRON_TIME="<time>" \
@@ -61,7 +62,7 @@ docker run --rm \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
-    -e WEBDAV_TARGET_DIR="/test" \
+    -e WEBDAV_TARGET_DIR="<target-directory>" \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e DEBUG=true \
@@ -84,9 +85,10 @@ services:
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
-      WEBDAV_URL: "https://<webdav-host>/remote.php/dav/files/<username>/<folder>"
+      WEBDAV_URL: "https://<webdav-host>/remote.php/dav/files/<username>"
       WEBDAV_USERNAME: "<username>"
       WEBDAV_PASSWORD: "<password>"
+      WEBDAV_TARGET_DIR: "<target-directory>"
       USE_ENCRYPTION: "true"
       ENCRYPTION_PASSWORD: "<password-for-encryption>"
       CRON_TIME: "<time>"
@@ -106,6 +108,7 @@ docker-compose up -d
 | `WEBDAV_URL`     | URL of the WebDAV server.                                                          | None          |
 | `WEBDAV_USERNAME`| Username for the WebDAV server.                                                    | None          |
 | `WEBDAV_PASSWORD`| Password for the WebDAV server.                                                    | None          |
+| `WEBDAV_TARGET_DIR`| Target directory in which the zip of the mounted volume is stored.               | None          |
 | `USE_ENCRYPTION` | Whether to encrypt the files before syncing (`true` or `false`).                   | `true`        |
 | `ENCRYPTION_PASSWORD`   | Password for encrypting the zip file. Required if `USE_ENCRYPTION` is true. | None          |
 | `CRON_TIME`      | Cron schedule time (e.g., `0 2` for 2:00 AM, `30 22` for 22:30).                   | `0 2`         |
@@ -134,6 +137,7 @@ docker run -d \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
+    -e WEBDAV_TARGET_DIR="<target-directory>" \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e CRON_TIME="<time>" \
@@ -154,6 +158,7 @@ docker run -d \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
+    -e WEBDAV_TARGET_DIR="<target-directory>" \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e CRON_TIME="<time>" \
