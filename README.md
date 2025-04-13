@@ -130,14 +130,7 @@ docker run -d \
     -v /path/to/your/data:/data \
     -v /etc/localtime:/etc/localtime:ro \
     -v /etc/timezone:/etc/timezone:ro \
-    -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
-    -e WEBDAV_USERNAME="<username>" \
-    -e WEBDAV_PASSWORD="<password>" \
-    -e WEBDAV_TARGET_DIR="<target-directory>" \
-    -e USE_ENCRYPTION=true \
-    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
-    -e CRON_TIME="<time>" \
-    -e CRON_DAYS="<days>" \
+    ...
     ghcr.io/tsafs/webdav-daily-sync:latest
 ```
 
@@ -150,14 +143,7 @@ If you explicitly set the `TIMEZONE` variable, this ensures that the container u
 docker run -d \
     --name webdav-sync \
     -v /path/to/your/data:/data \
-    -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
-    -e WEBDAV_USERNAME="<username>" \
-    -e WEBDAV_PASSWORD="<password>" \
-    -e WEBDAV_TARGET_DIR="<target-directory>" \
-    -e USE_ENCRYPTION=true \
-    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
-    -e CRON_TIME="<time>" \
-    -e CRON_DAYS="<days>" \
+    ...
     -e TIMEZONE="Europe/Berlin" \
     ghcr.io/tsafs/webdav-daily-sync:latest
 ```
