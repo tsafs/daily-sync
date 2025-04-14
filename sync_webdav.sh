@@ -19,9 +19,9 @@ WEBDAV_TARGET_DIR="${WEBDAV_TARGET_DIR:-/data}" # Default to /data if not set
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
-    ZIP_FILE="/tmp/encrypted_data.zip"  # Temporary zip file for encrypted data
+    ZIP_FILE="/tmp/encrypted_data_$(date +%Y%m%d_%H%M%S).zip"  # Temporary zip file for encrypted data
 else
-    ZIP_FILE="/tmp/data.zip"  # Temporary zip file for unencrypted data
+    ZIP_FILE="/tmp/data_$(date +%Y%m%d_%H%M%S).zip"  # Temporary zip file for unencrypted data
 fi
 
 # Configure rclone remote
