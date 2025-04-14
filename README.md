@@ -1,19 +1,18 @@
-# WebDAV Daily Sync
-
-WebDAV Daily Sync is a lightweight solution for syncing files to a WebDAV server. It supports optional encryption using password-protected zip files (AES-256) and is designed to run as a Docker container with a configurable cron schedule.
+# Daily Sync
+Daily Sync is a lightweight solution for syncing files to various targets. It currently supports syncing to a WebDAV server or another directory on the host. It was originally developed for use on NAS systems that lack built-in WebDAV sync capabilities or encryption options. It supports optional encryption using password-protected zip files (AES-256) and is designed to run as a Docker container with a configurable cron schedule.
 
 ## Features
-- Sync files to a WebDAV server.
+- Sync files to a WebDAV server or a local directory.
 - Optional encryption using password-protected zip files.
 - Configurable cron schedule for automated syncing.
 - Debug mode for manual testing.
 
 ## Docker Hub
 
-This Docker image is available on Docker Hub under the tag `ghcr.io/tsafs/webdav-daily-sync:latest`. You can pull it directly using:
+This Docker image is available on Docker Hub under the tag `ghcr.io/tsafs/daily-sync:latest`. You can pull it directly using:
 
 ```bash
-docker pull ghcr.io/tsafs/webdav-daily-sync:latest
+docker pull ghcr.io/tsafs/daily-sync:latest
 ```
 
 ## Prerequisites
@@ -25,19 +24,20 @@ docker pull ghcr.io/tsafs/webdav-daily-sync:latest
 To build the Docker image locally, run:
 
 ```bash
-docker build -t webdav-daily-sync .
+docker build -t daily-sync .
 ```
 
 ## Run the Container Directly
 
-### Production Mode
+### Production Mode - WebDAV Sync
 
-Run the container in production mode with the following command:
+Run the container in production mode to sync to WebDAV:
 
 ```bash
 docker run -d \
-    --name webdav-sync \
+    --name daily-sync-webdav \
     -v /path/to/your/data:/data:ro \
+    -e SYNC_MODE="webdav" \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
@@ -47,16 +47,36 @@ docker run -d \
     -e CRON_TIME="<time>" \
     -e CRON_DAYS="<days>" \
     -e TIMEZONE="Europe/Berlin" \
-    ghcr.io/tsafs/webdav-daily-sync:latest
+    ghcr.io/tsafs/daily-sync:latest
 ```
 
-### Debug Mode
+### Production Mode - Directory Sync
 
-Run the container in debug mode to test the sync process manually. This effectively disables cron for testing purposes:
+Run the container in production mode to sync to another directory on the host:
+
+```bash
+docker run -d \
+    --name daily-sync-dir \
+    -v /path/to/your/data:/data:ro \
+    -v /path/to/target/directory:/target \
+    -e SYNC_MODE="directory" \
+    -e USE_ENCRYPTION=true \
+    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
+    -e CRON_TIME="<time>" \
+    -e CRON_DAYS="<days>" \
+    -e TIMEZONE="Europe/Berlin" \
+    ghcr.io/tsafs/daily-sync:latest
+```
+*Note: Ensure the target directory (`/path/to/target/directory` on the host) exists. The ownership of the synced file will automatically match the ownership of the `/path/to/target/directory` on the host.*
+
+### Debug Mode - WebDAV Sync
+
+Run the container in debug mode to test the WebDAV sync process manually:
 
 ```bash
 docker run --rm \
     -v ./test_data:/data:ro \
+    -e SYNC_MODE="webdav" \
     -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
@@ -64,24 +84,42 @@ docker run --rm \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e DEBUG=true \
-    ghcr.io/tsafs/webdav-daily-sync:latest
+    ghcr.io/tsafs/daily-sync:latest
 ```
+
+### Debug Mode - Directory Sync
+
+Run the container in debug mode to test the directory sync process manually:
+
+```bash
+docker run --rm \
+    -v ./test_data:/data:ro \
+    -v ./test_target:/target \
+    -e SYNC_MODE="directory" \
+    -e USE_ENCRYPTION=true \
+    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
+    -e DEBUG=true \
+    ghcr.io/tsafs/daily-sync:latest
+```
+*Note: Ensure the target directory (`./test_target` in this example) exists. The ownership of the synced file will automatically match the ownership of the `./test_target` directory.*
+
 
 ## Run the Container with Docker Compose
 
-Create a `docker-compose.yml` file with the following content:
+### WebDAV Sync Example
 
 ```yaml
 version: '3.8'
 services:
-  webdav-sync:
-    image: ghcr.io/tsafs/webdav-daily-sync:latest
-    container_name: webdav-daily-sync
+  daily-sync-webdav:
+    image: ghcr.io/tsafs/daily-sync:latest
+    container_name: daily-sync-webdav
     volumes:
       - /path/to/your/data:/data:ro
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
+      SYNC_MODE: "webdav"
       WEBDAV_URL: "https://<webdav-host>/remote.php/dav/files/<username>"
       WEBDAV_USERNAME: "<username>"
       WEBDAV_PASSWORD: "<password>"
@@ -92,6 +130,29 @@ services:
       CRON_DAYS: "<days>"
 ```
 
+### Directory Sync Example
+
+```yaml
+version: '3.8'
+services:
+  daily-sync-dir:
+    image: ghcr.io/tsafs/daily-sync:latest
+    container_name: daily-sync-dir
+    volumes:
+      - /path/to/your/data:/data:ro
+      - /path/to/target/directory:/target # Mount the target directory
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      SYNC_MODE: "directory"
+      # File ownership is automatically set based on the mounted /target directory
+      USE_ENCRYPTION: "true"
+      ENCRYPTION_PASSWORD: "<password-for-encryption>"
+      CRON_TIME: "<time>" # Optional, defaults to "0 2"
+      CRON_DAYS: "<days>" # Optional, defaults to "*"
+      # TIMEZONE: "Europe/Berlin" # Optional, use if mounting localtime/timezone doesn't work or you want explicit control
+```
+
 Start the container with:
 
 ```bash
@@ -100,18 +161,21 @@ docker-compose up -d
 
 ## Environment Variables
 
-| Variable         | Description                                                                        | Default Value |
-|------------------|------------------------------------------------------------------------------------|---------------|
-| `WEBDAV_URL`     | URL of the WebDAV server.                                                          | None          |
-| `WEBDAV_USERNAME`| Username for the WebDAV server.                                                    | None          |
-| `WEBDAV_PASSWORD`| Password for the WebDAV server.                                                    | None          |
-| `WEBDAV_TARGET_DIR`| Target directory in which the zip of the mounted volume is stored.               | `/data`          |
-| `USE_ENCRYPTION` | Whether to encrypt the files before syncing (`true` or `false`).                   | `true`        |
-| `ENCRYPTION_PASSWORD`   | Password for encrypting the zip file. Required if `USE_ENCRYPTION` is true. | None          |
-| `CRON_TIME`      | Cron schedule time (e.g., `0 2` for 2:00 AM, `30 22` for 22:30).                   | `0 2`         |
-| `CRON_DAYS`      | Days for the cron job (e.g., `*` for every day, `0` for Sunday, `1,3,5` for Monday, Wednesday, and Friday). | `*`           |
-| `DEBUG`          | Enable debug mode to skip cron and run the sync script directly.                   | `false`       |
-| `TIMEZONE`       | Timezone for cron jobs (e.g., `Europe/Berlin`, `UTC`). See [IANA Time Zone Database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) for valid values. | None          |
+| Variable         | Description                                                                        | Default Value | Required For |
+|------------------|------------------------------------------------------------------------------------|---------------|--------------|
+| `SYNC_MODE`      | Sync target mode (`webdav` or `directory`).                                        | `webdav`      | Always       |
+| `WEBDAV_URL`     | URL of the WebDAV server.                                                          | None          | `webdav`     |
+| `WEBDAV_USERNAME`| Username for the WebDAV server.                                                    | None          | `webdav`     |
+| `WEBDAV_PASSWORD`| Password for the WebDAV server.                                                    | None          | `webdav`     |
+| `WEBDAV_TARGET_DIR`| Target directory on the WebDAV server.                                           | `/data`       | `webdav` (Optional) |
+| `USE_ENCRYPTION` | Whether to encrypt the files before syncing (`true` or `false`).                   | `true`        | Always       |
+| `ENCRYPTION_PASSWORD`   | Password for encrypting the zip file. Required if `USE_ENCRYPTION` is true. | None          | If `USE_ENCRYPTION=true` |
+| `CRON_TIME`      | Cron schedule time (e.g., `0 2` for 2:00 AM, `30 22` for 22:30).                   | `0 2`         | Always (Optional) |
+| `CRON_DAYS`      | Days for the cron job (e.g., `*` for every day, `0` for Sunday, `1,3,5` for Monday, Wednesday, and Friday). | `*`           | Always (Optional) |
+| `DEBUG`          | Enable debug mode to skip cron and run the sync script directly.                   | `false`       | Always (Optional) |
+| `TIMEZONE`       | Timezone for cron jobs (e.g., `Europe/Berlin`, `UTC`). See [IANA Time Zone Database](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones) for valid values. | None          | Always (Optional) |
+
+*Note: For `directory` sync mode, the ownership of the created zip file in the target directory will automatically match the ownership of the mounted target directory itself.*
 
 ## Timezone Configuration
 
@@ -131,7 +195,7 @@ docker run -d \
     -v /etc/localtime:/etc/localtime:ro \
     -v /etc/timezone:/etc/timezone:ro \
     ...
-    ghcr.io/tsafs/webdav-daily-sync:latest
+    ghcr.io/tsafs/daily-sync:latest
 ```
 
 This approach works on most Linux distributions that use `/etc/localtime` and `/etc/timezone` for timezone configuration. Note that this method is not supported on systems like macOS or Windows, as they do not use these files for timezone management.
@@ -145,14 +209,14 @@ docker run -d \
     -v /path/to/your/data:/data:ro \
     ...
     -e TIMEZONE="Europe/Berlin" \
-    ghcr.io/tsafs/webdav-daily-sync:latest
+    ghcr.io/tsafs/daily-sync:latest
 ```
 
 Setting the `TIMEZONE` variable to a UTC-based value (e.g., `UTC`) ensures that the container operates without being affected by daylight saving time (DST) changes, providing consistent scheduling behavior.
 
 ## Contribution Guidelines
 
-I welcome contributions to the WebDAV Daily Sync project! To contribute, please follow these steps:
+I welcome contributions to the Daily Sync project! To contribute, please follow these steps:
 
 1. **Fork the Repository**: Create a fork of this repository on GitHub.
 2. **Create a Branch**: Create a new branch for your feature or bug fix. Use a descriptive name for the branch (e.g., `feature/add-logging` or `bugfix/fix-sync-issue`).

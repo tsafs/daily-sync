@@ -23,11 +23,13 @@ RUN wget https://downloads.rclone.org/rclone-current-linux-amd64.deb && \
 # Create necessary directories
 RUN mkdir -p /data
 
-# Copy the sync script into the container
-COPY sync.sh /usr/local/bin/sync.sh
+# Copy the sync scripts into the container
+COPY sync_webdav.sh /usr/local/bin/sync_webdav.sh
+COPY sync_directory.sh /usr/local/bin/sync_directory.sh
 
-# Make the script executable
-RUN chmod +x /usr/local/bin/sync.sh
+# Make the scripts executable
+RUN chmod +x /usr/local/bin/sync_webdav.sh
+RUN chmod +x /usr/local/bin/sync_directory.sh
 
 # Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

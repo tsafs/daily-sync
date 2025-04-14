@@ -36,11 +36,11 @@ jobs:
         run: |
           docker build \
             --build-arg VERSION=$VERSION \
-            -t ghcr.io/tsafs/webdav-daily-sync:$VERSION \
-            -t ghcr.io/tsafs/webdav-daily-sync:latest .
+            -t ghcr.io/tsafs/daily-sync:$VERSION \
+            -t ghcr.io/tsafs/daily-sync:latest .
 
       # Push both Docker image tags to Docker Hub
       - name: Push Docker image
         run: |
-          docker push ghcr.io/tsafs/webdav-daily-sync:$VERSION
-          docker push ghcr.io/tsafs/webdav-daily-sync:latest
+          docker push ghcr.io/tsafs/daily-sync:$VERSION
+          docker push ghcr.io/tsafs/daily-sync:latest
