@@ -79,7 +79,6 @@ echo "Exporting environment variables for cron..."
         :
     fi
 } > /etc/environment
-cat /etc/environment
 
 # Generate the cron job with the correct sync script
 echo "Generating cron job with schedule: $CRON_MINUTE $CRON_HOUR * * $CRON_DAYS"
