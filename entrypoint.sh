@@ -65,7 +65,6 @@ escape_env_var() {
 }
 
 # Exporting environment variables for cron based on SYNC_MODE
-echo "Exporting environment variables for cron..."
 {
     echo "USE_ENCRYPTION=$(escape_env_var "${USE_ENCRYPTION:-true}")"
     echo "ENCRYPTION_PASSWORD=$(escape_env_var "$ENCRYPTION_PASSWORD")" # Needed for both modes if encryption is on
