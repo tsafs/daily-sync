@@ -140,17 +140,15 @@ services:
     container_name: daily-sync-dir
     volumes:
       - /path/to/your/data:/data:ro
-      - /path/to/target/directory:/target # Mount the target directory
+      - /path/to/target/directory:/target
       - /etc/localtime:/etc/localtime:ro
       - /etc/timezone:/etc/timezone:ro
     environment:
       SYNC_MODE: "directory"
-      # File ownership is automatically set based on the mounted /target directory
       USE_ENCRYPTION: "true"
       ENCRYPTION_PASSWORD: "<password-for-encryption>"
-      CRON_TIME: "<time>" # Optional, defaults to "0 2"
-      CRON_DAYS: "<days>" # Optional, defaults to "*"
-      # TIMEZONE: "Europe/Berlin" # Optional, use if mounting localtime/timezone doesn't work or you want explicit control
+      CRON_TIME: "<time>"
+      CRON_DAYS: "<days>"
 ```
 
 Start the container with:
