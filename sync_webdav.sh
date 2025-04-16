@@ -17,6 +17,7 @@ fi
 DATA_DIR="/data"               # Directory containing unencrypted files
 WEBDAV_TARGET_DIR="${WEBDAV_TARGET_DIR:-/data}" # Default to /data if not set
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
+RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default to retaining 1 backup
 
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
     ZIP_FILE="/tmp/encrypted_data_$(date +%Y%m%d_%H%M%S).zip"  # Temporary zip file for encrypted data
@@ -69,7 +70,29 @@ if [[ "$USE_ENCRYPTION" == "true" ]]; then
     echo "Uploading encrypted zip file to WebDAV..."
     rclone copy "$ZIP_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR" --config "$RCLONE_CONFIG_FILE"
 
-    # Clean up
+    # Clean up old backups
+    echo "Cleaning up old backups, retaining the latest $RETAIN_BACKUPS..."
+
+    # List files, sort reverse (newest first), skip the ones to retain, get the rest
+    files_to_delete=$(rclone lsf --config "$RCLONE_CONFIG_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR" | \
+        grep -E "^(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" | \
+        sed -E 's/^(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' | \
+        sort -k1,1r | \
+        cut -d' ' -f2- | \
+        tail -n +$((RETAIN_BACKUPS + 1)))
+
+    if [ -n "$files_to_delete" ]; then
+        echo "Deleting old backups:"
+        echo "$files_to_delete"
+        echo "$files_to_delete" | while IFS= read -r file; do
+            rclone delete --config "$RCLONE_CONFIG_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR/$file"
+        done
+    else
+        echo "No old backups to delete."
+    fi
+
+
+    # Clean up temporary files
     rm -rf "$TEMP_DIR" "$ZIP_FILE" "$RCLONE_CONFIG_FILE"
 
     echo "Sync complete."
@@ -86,7 +109,28 @@ else
     echo "Uploading unencrypted zip file to WebDAV..."
     rclone copy "$ZIP_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR" --config "$RCLONE_CONFIG_FILE"
 
-    # Clean up
+    # Clean up old backups
+    echo "Cleaning up old backups, retaining the latest $RETAIN_BACKUPS..."
+    # List files, sort reverse (newest first), skip the ones to retain, get the rest
+    files_to_delete=$(rclone lsf --config "$RCLONE_CONFIG_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR" | \
+        grep -E "^(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" | \
+        sed -E 's/^(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' | \
+        sort -k1,1r | \
+        cut -d' ' -f2- | \
+        tail -n +$((RETAIN_BACKUPS + 1)))
+
+    if [ -n "$files_to_delete" ]; then
+        echo "Deleting old backups:"
+        echo "$files_to_delete"
+        echo "$files_to_delete" | while IFS= read -r file; do
+            echo "Deleting $file"
+            rclone delete --config "$RCLONE_CONFIG_FILE" "$RCLONE_REMOTE:$WEBDAV_TARGET_DIR/$file"
+        done
+    else
+        echo "No old backups to delete."
+    fi
+
+    # Clean up temporary files
     rm -rf "$TEMP_DIR" "$ZIP_FILE" "$RCLONE_CONFIG_FILE"
 
     echo "Sync complete."

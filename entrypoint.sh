@@ -14,6 +14,7 @@ CRON_DAYS="${CRON_DAYS:-*}"  # Default to every day
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 DEBUG="${DEBUG:-false}"
 SYNC_MODE="${SYNC_MODE:-webdav}" # Default sync mode is webdav
+RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default number of backups to retain
 
 # Split CRON_TIME into minute and hour
 CRON_MINUTE=$(echo "$CRON_TIME" | awk '{print $1}')
@@ -27,6 +28,12 @@ fi
 
 if ! [[ "$CRON_HOUR" =~ ^([0-2]?[0-9]|\*)$ ]]; then
     echo "Error: CRON_HOUR must be a valid hour (0-23) or '*'."
+    exit 1
+fi
+
+# Validate RETAIN_BACKUPS
+if ! [[ "$RETAIN_BACKUPS" =~ ^[1-9][0-9]*$ ]]; then
+    echo "Error: RETAIN_BACKUPS must be a positive integer greater than 0."
     exit 1
 fi
 
@@ -68,6 +75,7 @@ escape_env_var() {
 {
     echo "USE_ENCRYPTION=$(escape_env_var "${USE_ENCRYPTION:-true}")"
     echo "ENCRYPTION_PASSWORD=$(escape_env_var "$ENCRYPTION_PASSWORD")" # Needed for both modes if encryption is on
+    echo "RETAIN_BACKUPS=$(escape_env_var "$RETAIN_BACKUPS")" # Export retain count
     if [[ "$SYNC_MODE" == "webdav" ]]; then
         echo "WEBDAV_URL=$(escape_env_var "$WEBDAV_URL")"
         echo "WEBDAV_USERNAME=$(escape_env_var "$WEBDAV_USERNAME")"

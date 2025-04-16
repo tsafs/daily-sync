@@ -14,17 +14,18 @@ if [ -f /etc/environment ]; then
 fi
 
 # Variables
-DATA_DIR="/data"               # Directory containing unencrypted files
+DATA_DIR="/data"           # Directory containing unencrypted files
 TARGET_DIRECTORY="/target" # Target directory inside the container
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
+RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default to retaining 1 backup
 
 # Ensure target directory exists
 mkdir -p "$TARGET_DIRECTORY"
 
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
-    ZIP_FILE="/tmp/encrypted_data_$(date +%Y%m%d_%H%M%S).zip"  # Temporary zip file for encrypted data
+    ZIP_FILE="/tmp/encrypted_data_$(date +%Y%m%d_%H%M%S).zip" # Temporary zip file for encrypted data
 else
-    ZIP_FILE="/tmp/data_$(date +%Y%m%d_%H%M%S).zip"  # Temporary zip file for unencrypted data
+    ZIP_FILE="/tmp/data_$(date +%Y%m%d_%H%M%S).zip" # Temporary zip file for unencrypted data
 fi
 
 # Create a temporary directory for processing
@@ -59,7 +60,26 @@ if [[ "$USE_ENCRYPTION" == "true" ]]; then
     echo "Changing ownership of $TARGET_DIRECTORY/$(basename $ZIP_FILE) to $TARGET_OWNER"
     chown "$TARGET_OWNER" "$TARGET_DIRECTORY/$(basename $ZIP_FILE)"
 
-    # Clean up
+    # Clean up old backups
+    echo "Cleaning up old backups in $TARGET_DIRECTORY, retaining the latest $RETAIN_BACKUPS..."
+    # List files matching the pattern, sort by time (newest first), skip the ones to retain, get the rest
+    files_to_delete=$(find "$TARGET_DIRECTORY" -maxdepth 1 -regextype posix-extended -regex "^.*/(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" -printf '%f\n' |
+        sed -E 's/(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' |
+        sort -k1,1r |
+        cut -d' ' -f2- |
+        tail -n +$((RETAIN_BACKUPS + 1)) |
+        sed "s|^|$TARGET_DIRECTORY/|")
+
+    if [ -n "$files_to_delete" ]; then
+        echo "Deleting old backups:"
+        echo "$files_to_delete"
+        echo "$files_to_delete" | xargs -d '
+' rm
+    else
+        echo "No old backups to delete."
+    fi
+
+    # Clean up temporary files
     rm -rf "$TEMP_DIR" "$ZIP_FILE"
 
     echo "Directory sync complete (encrypted)."
@@ -84,7 +104,27 @@ else
     echo "Changing ownership of $TARGET_DIRECTORY/$(basename $ZIP_FILE) to $TARGET_OWNER"
     chown "$TARGET_OWNER" "$TARGET_DIRECTORY/$(basename $ZIP_FILE)"
 
-    # Clean up
+    # Clean up old backups
+    echo "Cleaning up old backups in $TARGET_DIRECTORY, retaining the latest $RETAIN_BACKUPS..."
+
+    # List files matching the pattern, sort by time (newest first), skip the ones to retain, get the rest
+    files_to_delete=$(find "$TARGET_DIRECTORY" -maxdepth 1 -regextype posix-extended -regex "^.*/(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" -printf '%f\n' |
+        sed -E 's/(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' |
+        sort -k1,1r |
+        cut -d' ' -f2- |
+        tail -n +$((RETAIN_BACKUPS + 1)) |
+        sed "s|^|$TARGET_DIRECTORY/|") # Prepend directory path for deletion
+
+    if [ -n "$files_to_delete" ]; then
+        echo "Deleting old backups:"
+        echo "$files_to_delete"
+        echo "$files_to_delete" | xargs -d '
+' rm
+    else
+        echo "No old backups to delete."
+    fi
+
+    # Clean up temporary files
     rm -rf "$TEMP_DIR" "$ZIP_FILE"
 
     echo "Directory sync complete (unencrypted)."
