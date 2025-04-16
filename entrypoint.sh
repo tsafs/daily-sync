@@ -81,7 +81,11 @@ escape_env_var() {
 
 # Generate the cron job with the correct sync script
 echo "Generating cron job with schedule: $CRON_MINUTE $CRON_HOUR * * $CRON_DAYS"
-echo "$CRON_MINUTE $CRON_HOUR * * $CRON_DAYS $SYNC_SCRIPT >> /var/log/cron.log 2>&1" > /etc/cron.d/daily-sync
+if [[ "$SYNC_MODE" == "webdav" ]]; then
+    echo "$CRON_MINUTE $CRON_HOUR * * $CRON_DAYS /usr/local/bin/sync_webdav.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/daily-sync
+elif [[ "$SYNC_MODE" == "directory" ]]; then
+    echo "$CRON_MINUTE $CRON_HOUR * * $CRON_DAYS /usr/local/bin/sync_directory.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/daily-sync
+fi
 
 # Set permissions for the cron job file
 chmod 0644 /etc/cron.d/daily-sync
