@@ -30,12 +30,6 @@ RCLONE_REMOTE="webdav"
 RCLONE_CONFIG_FILE="/tmp/rclone.conf"
 RCLONE_PASSWORD=$(echo "$WEBDAV_PASSWORD" | rclone obscure -)
 
-echo $WEBDAV_URL
-echo $WEBDAV_USERNAME
-echo $RCLONE_PASSWORD
-echo $RCLONE_REMOTE
-echo $RCLONE_CONFIG_FILE
-
 # Create rclone config file
 cat <<EOF > "$RCLONE_CONFIG_FILE"
 [${RCLONE_REMOTE}]
