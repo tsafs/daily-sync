@@ -19,14 +19,18 @@ TARGET_DIRECTORY="/target" # Target directory inside the container
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default to retaining 1 backup
 
+# Configure naming based on encryption setting and timestamp
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+if [[ "$USE_ENCRYPTION" == "true" ]]; then
+    ARCHIVE_BASE_NAME="/tmp/encrypted_data_${TIMESTAMP}"
+else
+    ARCHIVE_BASE_NAME="/tmp/data_${TIMESTAMP}"
+fi
+ARCHIVE_EXT=".zip"
+ARCHIVE_FILE="${ARCHIVE_BASE_NAME}${ARCHIVE_EXT}"
+
 # Ensure target directory exists
 mkdir -p "$TARGET_DIRECTORY"
-
-if [[ "$USE_ENCRYPTION" == "true" ]]; then
-    ZIP_FILE="/tmp/encrypted_data_$(date +%Y%m%d_%H%M%S).zip" # Temporary zip file for encrypted data
-else
-    ZIP_FILE="/tmp/data_$(date +%Y%m%d_%H%M%S).zip" # Temporary zip file for unencrypted data
-fi
 
 # Create a temporary directory for processing
 TEMP_DIR=$(mktemp -d)
@@ -35,97 +39,56 @@ TEMP_DIR=$(mktemp -d)
 echo "Copying data directory to temporary location..."
 cp -r "$DATA_DIR" "$TEMP_DIR/data"
 
-# Ensure proper permissions for the copied directory
-echo "Setting permissions for the copied directory..."
-chmod -R 755 "$TEMP_DIR/data"
+# # Ensure proper permissions for the copied directory
+# echo "Setting permissions for the copied directory..."
+# chmod -R 755 "$TEMP_DIR/data"
 
+# Create zip file (with or without encryption)
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
-    # Create a password-protected zip file
     echo "Creating encrypted zip file..."
-    7z a -p"$ENCRYPTION_PASSWORD" "$ZIP_FILE" "$TEMP_DIR/data"
-
-    # Ensure proper permissions for the zip file
-    echo "Setting permissions for the encrypted zip file..."
-    chmod 644 "$ZIP_FILE"
-
-    # Copy the zip file to the target directory
-    echo "Copying encrypted zip file to target directory: $TARGET_DIRECTORY"
-    cp "$ZIP_FILE" "$TARGET_DIRECTORY/"
-
-    # Get ownership of the target directory
-    TARGET_OWNER=$(stat -c '%u:%g' "$TARGET_DIRECTORY")
-    echo "Detected target directory ownership: $TARGET_OWNER"
-
-    # Change ownership of the copied file to match the target directory
-    echo "Changing ownership of $TARGET_DIRECTORY/$(basename $ZIP_FILE) to $TARGET_OWNER"
-    chown "$TARGET_OWNER" "$TARGET_DIRECTORY/$(basename $ZIP_FILE)"
-
-    # Clean up old backups
-    echo "Cleaning up old backups in $TARGET_DIRECTORY, retaining the latest $RETAIN_BACKUPS..."
-    # List files matching the pattern, sort by time (newest first), skip the ones to retain, get the rest
-    files_to_delete=$(find "$TARGET_DIRECTORY" -maxdepth 1 -regextype posix-extended -regex "^.*/(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" -printf '%f\n' |
-        sed -E 's/(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' |
-        sort -k1,1r |
-        cut -d' ' -f2- |
-        tail -n +$((RETAIN_BACKUPS + 1)) |
-        sed "s|^|$TARGET_DIRECTORY/|")
-
-    if [ -n "$files_to_delete" ]; then
-        echo "Deleting old backups:"
-        echo "$files_to_delete"
-        echo "$files_to_delete" | xargs -d '
-' rm
-    else
-        echo "No old backups to delete."
-    fi
-
-    # Clean up temporary files
-    rm -rf "$TEMP_DIR" "$ZIP_FILE"
-
-    echo "Directory sync complete (encrypted)."
+    7z a -p"$ENCRYPTION_PASSWORD" "$ARCHIVE_FILE" "$TEMP_DIR/data"
 else
-    # Create an unencrypted zip file
     echo "Creating unencrypted zip file..."
-    7z a "$ZIP_FILE" "$TEMP_DIR/data"
-
-    # Ensure proper permissions for the zip file
-    echo "Setting permissions for the unencrypted zip file..."
-    chmod 644 "$ZIP_FILE"
-
-    # Copy the zip file to the target directory
-    echo "Copying unencrypted zip file to target directory: $TARGET_DIRECTORY"
-    cp "$ZIP_FILE" "$TARGET_DIRECTORY/"
-
-    # Get ownership of the target directory
-    TARGET_OWNER=$(stat -c '%u:%g' "$TARGET_DIRECTORY")
-    echo "Detected target directory ownership: $TARGET_OWNER"
-
-    # Change ownership of the copied file to match the target directory
-    echo "Changing ownership of $TARGET_DIRECTORY/$(basename $ZIP_FILE) to $TARGET_OWNER"
-    chown "$TARGET_OWNER" "$TARGET_DIRECTORY/$(basename $ZIP_FILE)"
-
-    # Clean up old backups
-    echo "Cleaning up old backups in $TARGET_DIRECTORY, retaining the latest $RETAIN_BACKUPS..."
-
-    # List files matching the pattern, sort by time (newest first), skip the ones to retain, get the rest
-    files_to_delete=$(find "$TARGET_DIRECTORY" -maxdepth 1 -regextype posix-extended -regex "^.*/(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" -printf '%f\n' |
-        sed -E 's/(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' |
-        sort -k1,1r |
-        cut -d' ' -f2- |
-        tail -n +$((RETAIN_BACKUPS + 1)) |
-        sed "s|^|$TARGET_DIRECTORY/|") # Prepend directory path for deletion
-
-    if [ -n "$files_to_delete" ]; then
-        echo "Deleting old backups:"
-        echo "$files_to_delete"
-        echo "$files_to_delete" | xargs -d '
-' rm
-    else
-        echo "No old backups to delete."
-    fi
-
-    # Clean up temporary files
-    rm -rf "$TEMP_DIR" "$ZIP_FILE"
-
-    echo "Directory sync complete (unencrypted)."
+    7z a "$ARCHIVE_FILE" "$TEMP_DIR/data"
 fi
+
+# # Ensure proper permissions for the zip file
+# echo "Setting permissions for the zip file..."
+# chmod 644 "$ARCHIVE_FILE"
+
+# Copy the zip file to the target directory
+echo "Copying zip file to target directory: $TARGET_DIRECTORY"
+cp "$ARCHIVE_FILE" "$TARGET_DIRECTORY/"
+
+# Get ownership of the target directory
+TARGET_OWNER=$(stat -c '%u:%g' "$TARGET_DIRECTORY")
+echo "Detected target directory ownership: $TARGET_OWNER"
+
+# Change ownership of the copied file to match the target directory
+TARGET_FILE_PATH="$TARGET_DIRECTORY/$(basename $ARCHIVE_FILE)"
+echo "Changing ownership of $TARGET_FILE_PATH to $TARGET_OWNER"
+chown "$TARGET_OWNER" "$TARGET_FILE_PATH"
+
+# Clean up old backups
+echo "Cleaning up old backups in $TARGET_DIRECTORY, retaining the latest $RETAIN_BACKUPS..."
+# List files matching the pattern, sort by time (newest first), skip the ones to retain, get the rest
+files_to_delete=$(find "$TARGET_DIRECTORY" -maxdepth 1 -regextype posix-extended -regex "^.*/(encrypted_data_|data_)[0-9]{8}_[0-9]{6}\.zip$" -printf '%f\n' |
+    sed -E 's/(encrypted_data_|data_)([0-9]{8}_[0-9]{6})\.zip$/\2 \0/' | # Extract timestamp for sorting
+    sort -k1,1r | # Sort by timestamp descending (newest first)
+    cut -d' ' -f2- | # Get the original filename back
+    tail -n +$((RETAIN_BACKUPS + 1)) | # Skip the newest N backups
+    sed "s|^|$TARGET_DIRECTORY/|") # Prepend directory path for deletion
+
+if [ -n "$files_to_delete" ]; then
+    echo "Deleting old backups:"
+    echo "$files_to_delete"
+    echo "$files_to_delete" | xargs -d '\n' rm -- # Use newline as delimiter and ensure rm handles filenames correctly
+else
+    echo "No old backups to delete."
+fi
+
+# Clean up temporary files
+echo "Cleaning up temporary files..."
+rm -rf "$TEMP_DIR" "$ARCHIVE_FILE"
+
+echo "Directory sync complete."
