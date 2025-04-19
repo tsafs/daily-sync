@@ -1,8 +1,8 @@
 # Daily Sync
-Daily Sync is a lightweight solution for syncing files to various targets. It currently supports syncing to a WebDAV server or another directory on the host. It was originally developed for use on NAS systems that lack built-in WebDAV sync capabilities or encryption options. It supports optional encryption using password-protected zip files (AES-256) and is designed to run as a Docker container with a configurable cron schedule.
+Daily Sync is a lightweight solution for syncing files to various targets. It currently supports syncing to a WebDAV server, an FTP server, or another directory on the host. It was originally developed for use on NAS systems that lack built-in WebDAV sync capabilities or encryption options. It supports optional encryption using password-protected zip files (AES-256) and is designed to run as a Docker container with a configurable cron schedule.
 
 ## Features
-- Sync files to a WebDAV server or a local directory.
+- Sync files to a WebDAV server, FTP server, or a local directory.
 - Optional encryption using password-protected zip files.
 - Configurable cron schedule for automated syncing.
 - Debug mode for manual testing.
@@ -50,6 +50,27 @@ docker run -d \
     ghcr.io/tsafs/daily-sync:latest
 ```
 
+### Production Mode - FTP Sync
+
+Run the container in production mode to sync to FTP:
+
+```bash
+docker run -d \
+    --name daily-sync-ftp \
+    -v /path/to/your/data:/data:ro \
+    -e SYNC_MODE="ftp" \
+    -e FTP_HOST="<ftp-host>" \
+    -e FTP_USER="<username>" \
+    -e FTP_PASSWORD="<password>" \
+    -e FTP_TARGET_DIR="<target-directory>" \
+    -e USE_ENCRYPTION=true \
+    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
+    -e CRON_TIME="<time>" \
+    -e CRON_DAYS="<days>" \
+    -e TIMEZONE="Europe/Berlin" \
+    ghcr.io/tsafs/daily-sync:latest
+```
+
 ### Production Mode - Directory Sync
 
 Run the container in production mode to sync to another directory on the host:
@@ -81,6 +102,24 @@ docker run --rm \
     -e WEBDAV_USERNAME="<username>" \
     -e WEBDAV_PASSWORD="<password>" \
     -e WEBDAV_TARGET_DIR="<target-directory>" \
+    -e USE_ENCRYPTION=true \
+    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
+    -e DEBUG=true \
+    ghcr.io/tsafs/daily-sync:latest
+```
+
+### Debug Mode - FTP Sync
+
+Run the container in debug mode to test the FTP sync process manually:
+
+```bash
+docker run --rm \
+    -v ./test_data:/data:ro \
+    -e SYNC_MODE="ftp" \
+    -e FTP_HOST="<ftp-host>" \
+    -e FTP_USER="<username>" \
+    -e FTP_PASSWORD="<password>" \
+    -e FTP_TARGET_DIR="<target-directory>" \
     -e USE_ENCRYPTION=true \
     -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
     -e DEBUG=true \
@@ -130,6 +169,30 @@ services:
       CRON_DAYS: "<days>"
 ```
 
+### FTP Sync Example
+
+```yaml
+version: '3.8'
+services:
+  daily-sync-ftp:
+    image: ghcr.io/tsafs/daily-sync:latest
+    container_name: daily-sync-ftp
+    volumes:
+      - /path/to/your/data:/data:ro
+      - /etc/localtime:/etc/localtime:ro
+      - /etc/timezone:/etc/timezone:ro
+    environment:
+      SYNC_MODE: "ftp"
+      FTP_HOST: "<ftp-host>"
+      FTP_USER: "<username>"
+      FTP_PASSWORD: "<password>"
+      FTP_TARGET_DIR: "<target-directory>"
+      USE_ENCRYPTION: "true"
+      ENCRYPTION_PASSWORD: "<password-for-encryption>"
+      CRON_TIME: "<time>"
+      CRON_DAYS: "<days>"
+```
+
 ### Directory Sync Example
 
 ```yaml
@@ -161,15 +224,19 @@ docker-compose up -d
 
 | Variable         | Description                                                                        | Default Value | Required For |
 |------------------|------------------------------------------------------------------------------------|---------------|--------------|
-| `SYNC_MODE`      | Sync target mode (`webdav` or `directory`).                                        | `webdav`      | Always       |
+| `SYNC_MODE`      | Sync target mode (`webdav`, `directory`, or `ftp`).                                | `webdav`      | Always       |
 | `WEBDAV_URL`     | URL of the WebDAV server.                                                          | None          | `webdav`     |
 | `WEBDAV_USERNAME`| Username for the WebDAV server.                                                    | None          | `webdav`     |
 | `WEBDAV_PASSWORD`| Password for the WebDAV server.                                                    | None          | `webdav`     |
 | `WEBDAV_TARGET_DIR`| Target directory on the WebDAV server.                                           | `/data`       | `webdav` (Optional) |
+| `FTP_HOST`       | Hostname or IP address of the FTP server.                                          | None          | `ftp`        |
+| `FTP_USER`       | Username for the FTP server.                                                       | None          | `ftp`        |
+| `FTP_PASSWORD`   | Password for the FTP server.                                                       | None          | `ftp`        |
+| `FTP_TARGET_DIR` | Target directory on the FTP server.                                                | `/`           | `ftp` (Optional) |
 | `USE_ENCRYPTION` | Whether to encrypt the files before syncing (`true` or `false`).                   | `true`        | Always       |
 | `ENCRYPTION_PASSWORD`   | Password for encrypting the zip file. Required if `USE_ENCRYPTION` is true. | None          | If `USE_ENCRYPTION=true` |
 | `RETAIN_BACKUPS` | Number of recent backups to keep in the target location. Older backups are deleted. | `1`           | Always (Optional) |
-| `CHUNK_SIZE_MB`  | Maximum size (in MB) for each part of the multi-volume zip archive for WebDAV uploads. Must be > 10 MB. Internally, 10 MB is subtracted from this value as a safety margin before creating zip volumes to avoid potential size limit issues. | `500`         | `webdav` (Optional) |
+| `CHUNK_SIZE_MB`  | Maximum size (in MB) for each part of the multi-volume zip archive for WebDAV or FTP uploads. Must be > 10 MB. Internally, 10 MB is subtracted from this value as a safety margin before creating zip volumes to avoid potential size limit issues. If set to 0 or less than 11, a single archive file will be created. | `0`         | `webdav`, `ftp` (Optional) |
 | `CRON_TIME`      | Cron schedule time (e.g., `0 2` for 2:00 AM, `30 22` for 22:30).                   | `0 2`         | Always (Optional) |
 | `CRON_DAYS`      | Days for the cron job (e.g., `*` for every day, `0` for Sunday, `1,3,5` for Monday, Wednesday, and Friday). | `*`           | Always (Optional) |
 | `DEBUG`          | Enable debug mode to skip cron and run the sync script directly.                   | `false`       | Always (Optional) |

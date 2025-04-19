@@ -13,6 +13,7 @@ RUN apt-get update && apt-get install -y \
     rsync \
     cron \
     wget \
+    lftp \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install rclone
@@ -26,10 +27,12 @@ RUN mkdir -p /data
 # Copy the sync scripts into the container
 COPY sync_webdav.sh /usr/local/bin/sync_webdav.sh
 COPY sync_directory.sh /usr/local/bin/sync_directory.sh
+COPY sync_ftp.sh /usr/local/bin/sync_ftp.sh
 
 # Make the scripts executable
 RUN chmod +x /usr/local/bin/sync_webdav.sh
 RUN chmod +x /usr/local/bin/sync_directory.sh
+RUN chmod +x /usr/local/bin/sync_ftp.sh
 
 # Copy the entrypoint script
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh

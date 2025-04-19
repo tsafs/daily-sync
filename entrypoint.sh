@@ -15,6 +15,7 @@ USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 DEBUG="${DEBUG:-false}"
 SYNC_MODE="${SYNC_MODE:-webdav}" # Default sync mode is webdav
 RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default number of backups to retain
+FTP_TARGET_DIR="${FTP_TARGET_DIR:-/}" # Default FTP target directory
 
 # Split CRON_TIME into minute and hour
 CRON_MINUTE=$(echo "$CRON_TIME" | awk '{print $1}')
@@ -47,8 +48,14 @@ if [[ "$SYNC_MODE" == "webdav" ]]; then
 elif [[ "$SYNC_MODE" == "directory" ]]; then
     # No specific env vars needed for directory mode anymore
     SYNC_SCRIPT="/usr/local/bin/sync_directory.sh"
+elif [[ "$SYNC_MODE" == "ftp" ]]; then
+    if [[ -z "$FTP_HOST" || -z "$FTP_USER" || -z "$FTP_PASSWORD" ]]; then
+        echo "Error: FTP_HOST, FTP_USER, and FTP_PASSWORD must be set for ftp sync mode."
+        exit 1
+    fi
+    SYNC_SCRIPT="/usr/local/bin/sync_ftp.sh"
 else
-    echo "Error: Invalid SYNC_MODE specified. Must be 'webdav' or 'directory'."
+    echo "Error: Invalid SYNC_MODE specified. Must be 'webdav', 'directory', or 'ftp'."
     exit 1
 fi
 
@@ -74,7 +81,7 @@ escape_env_var() {
 # Exporting environment variables for cron based on SYNC_MODE
 {
     echo "USE_ENCRYPTION=$(escape_env_var "${USE_ENCRYPTION:-true}")"
-    echo "ENCRYPTION_PASSWORD=$(escape_env_var "$ENCRYPTION_PASSWORD")" # Needed for both modes if encryption is on
+    echo "ENCRYPTION_PASSWORD=$(escape_env_var "$ENCRYPTION_PASSWORD")" # Needed for all modes if encryption is on
     echo "RETAIN_BACKUPS=$(escape_env_var "$RETAIN_BACKUPS")" # Export retain count
     if [[ "$SYNC_MODE" == "webdav" ]]; then
         echo "WEBDAV_URL=$(escape_env_var "$WEBDAV_URL")"
@@ -84,6 +91,11 @@ escape_env_var() {
     elif [[ "$SYNC_MODE" == "directory" ]]; then
         # No specific env vars to export for directory mode
         :
+    elif [[ "$SYNC_MODE" == "ftp" ]]; then
+        echo "FTP_HOST=$(escape_env_var "$FTP_HOST")"
+        echo "FTP_USER=$(escape_env_var "$FTP_USER")"
+        echo "FTP_PASSWORD=$(escape_env_var "$FTP_PASSWORD")"
+        echo "FTP_TARGET_DIR=$(escape_env_var "$FTP_TARGET_DIR")"
     fi
 } > /etc/environment
 
@@ -93,6 +105,8 @@ if [[ "$SYNC_MODE" == "webdav" ]]; then
     echo "$CRON_MINUTE $CRON_HOUR * * $CRON_DAYS /usr/local/bin/sync_webdav.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/daily-sync
 elif [[ "$SYNC_MODE" == "directory" ]]; then
     echo "$CRON_MINUTE $CRON_HOUR * * $CRON_DAYS /usr/local/bin/sync_directory.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/daily-sync
+elif [[ "$SYNC_MODE" == "ftp" ]]; then
+    echo "$CRON_MINUTE $CRON_HOUR * * $CRON_DAYS /usr/local/bin/sync_ftp.sh >> /var/log/cron.log 2>&1" > /etc/cron.d/daily-sync
 fi
 
 # Set permissions for the cron job file

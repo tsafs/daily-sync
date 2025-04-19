@@ -18,15 +18,22 @@ DATA_DIR="/data"               # Directory containing unencrypted files
 WEBDAV_TARGET_DIR="${WEBDAV_TARGET_DIR:-/data}" # Base target directory on WebDAV
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default to retaining 1 backup
-CHUNK_SIZE_MB="${CHUNK_SIZE_MB:-500}" # Max chunk size from env var
+CHUNK_SIZE_MB="${CHUNK_SIZE_MB:-0}" # Max chunk size from env var
 
 # Calculate volume size for 7z, subtracting 10MB for safety
 # Ensure volume size is at least 1MB
-VOLUME_SIZE_MB=$((CHUNK_SIZE_MB - 10))
-if [[ "$VOLUME_SIZE_MB" -lt 1 ]]; then
-    VOLUME_SIZE_MB=1
+VOLUME_ARG=""
+if [[ "$CHUNK_SIZE_MB" -gt 10 ]]; then
+    # Subtract 10MB for safety
+    VOLUME_SIZE_MB=$((CHUNK_SIZE_MB - 10))
+    if [[ "$VOLUME_SIZE_MB" -lt 1 ]]; then
+        VOLUME_SIZE_MB=1 # Ensure at least 1MB volume size
+    fi
+    VOLUME_ARG="-v${VOLUME_SIZE_MB}m"
+    echo "Using volume size: ${VOLUME_SIZE_MB}MB"
+else
+    echo "Chunk size not specified or too small, creating single archive."
 fi
-echo "Using volume size: ${VOLUME_SIZE_MB}MB"
 
 # Configure naming and backup directory based on encryption setting and timestamp
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
@@ -72,8 +79,6 @@ echo "Setting permissions for the copied directory..."
 chmod -R 755 "$TEMP_DIR/data"
 
 # Create multi-volume zip file (with or without encryption)
-# Use -v{size}m for volume size in MB. 7z creates .zip.001, .zip.002, etc.
-VOLUME_ARG="-v${VOLUME_SIZE_MB}m"
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
     echo "Creating encrypted multi-volume zip file (${VOLUME_SIZE_MB}MB parts)..."
     # Note: 7z uses the base name provided, and appends .zip.001 etc.
