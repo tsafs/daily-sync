@@ -169,6 +169,7 @@ docker-compose up -d
 | `USE_ENCRYPTION` | Whether to encrypt the files before syncing (`true` or `false`).                   | `true`        | Always       |
 | `ENCRYPTION_PASSWORD`   | Password for encrypting the zip file. Required if `USE_ENCRYPTION` is true. | None          | If `USE_ENCRYPTION=true` |
 | `RETAIN_BACKUPS` | Number of recent backups to keep in the target location. Older backups are deleted. | `1`           | Always (Optional) |
+| `CHUNK_SIZE_MB`  | Maximum size (in MB) for each part of the multi-volume zip archive for WebDAV uploads. Must be > 10 MB. Internally, 10 MB is subtracted from this value as a safety margin before creating zip volumes to avoid potential size limit issues. | `500`         | `webdav` (Optional) |
 | `CRON_TIME`      | Cron schedule time (e.g., `0 2` for 2:00 AM, `30 22` for 22:30).                   | `0 2`         | Always (Optional) |
 | `CRON_DAYS`      | Days for the cron job (e.g., `*` for every day, `0` for Sunday, `1,3,5` for Monday, Wednesday, and Friday). | `*`           | Always (Optional) |
 | `DEBUG`          | Enable debug mode to skip cron and run the sync script directly.                   | `false`       | Always (Optional) |
