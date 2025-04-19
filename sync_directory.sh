@@ -39,10 +39,6 @@ TEMP_DIR=$(mktemp -d)
 echo "Copying data directory to temporary location..."
 cp -r "$DATA_DIR" "$TEMP_DIR/data"
 
-# # Ensure proper permissions for the copied directory
-# echo "Setting permissions for the copied directory..."
-# chmod -R 755 "$TEMP_DIR/data"
-
 # Create zip file (with or without encryption)
 if [[ "$USE_ENCRYPTION" == "true" ]]; then
     echo "Creating encrypted zip file..."
@@ -51,10 +47,6 @@ else
     echo "Creating unencrypted zip file..."
     7z a "$ARCHIVE_FILE" "$TEMP_DIR/data"
 fi
-
-# # Ensure proper permissions for the zip file
-# echo "Setting permissions for the zip file..."
-# chmod 644 "$ARCHIVE_FILE"
 
 # Copy the zip file to the target directory
 echo "Copying zip file to target directory: $TARGET_DIRECTORY"
