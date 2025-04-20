@@ -16,6 +16,7 @@ DEBUG="${DEBUG:-false}"
 SYNC_MODE="${SYNC_MODE:-webdav}" # Default sync mode is webdav
 RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default number of backups to retain
 FTP_TARGET_DIR="${FTP_TARGET_DIR:-/}" # Default FTP target directory
+CHUNK_SIZE_MB="${CHUNK_SIZE_MB:-0}" # Max chunk size from env var
 
 # Split CRON_TIME into minute and hour
 CRON_MINUTE=$(echo "$CRON_TIME" | awk '{print $1}')
@@ -88,6 +89,7 @@ escape_env_var() {
         echo "WEBDAV_USERNAME=$(escape_env_var "$WEBDAV_USERNAME")"
         echo "WEBDAV_PASSWORD=$(escape_env_var "$WEBDAV_PASSWORD")"
         echo "WEBDAV_TARGET_DIR=$(escape_env_var "${WEBDAV_TARGET_DIR:-/data}")"
+        echo "CHUNK_SIZE_MB=$CHUNK_SIZE_MB"
     elif [[ "$SYNC_MODE" == "directory" ]]; then
         # No specific env vars to export for directory mode
         :
@@ -96,6 +98,7 @@ escape_env_var() {
         echo "FTP_USER=$(escape_env_var "$FTP_USER")"
         echo "FTP_PASSWORD=$(escape_env_var "$FTP_PASSWORD")"
         echo "FTP_TARGET_DIR=$(escape_env_var "$FTP_TARGET_DIR")"
+        echo "CHUNK_SIZE_MB=$CHUNK_SIZE_MB"
     fi
 } > /etc/environment
 

@@ -18,7 +18,6 @@ DATA_DIR="/data"               # Directory containing unencrypted files
 WEBDAV_TARGET_DIR="${WEBDAV_TARGET_DIR:-/data}" # Base target directory on WebDAV
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default to retaining 1 backup
-CHUNK_SIZE_MB="${CHUNK_SIZE_MB:-0}" # Max chunk size from env var
 
 # Calculate volume size for 7z, subtracting 10MB for safety
 # Ensure volume size is at least 1MB

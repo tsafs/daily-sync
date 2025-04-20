@@ -14,7 +14,6 @@ FTP_PASSWORD="${FTP_PASSWORD}"
 FTP_TARGET_DIR="${FTP_TARGET_DIR:-/}" # Base target directory on FTP, default to root
 USE_ENCRYPTION="${USE_ENCRYPTION:-true}"
 RETAIN_BACKUPS="${RETAIN_BACKUPS:-1}" # Default to keeping 1 backup
-CHUNK_SIZE_MB="${CHUNK_SIZE_MB:-0}" # Max chunk size from env var, 0 means no splitting
 
 # Validate required variables
 if [ -z "$FTP_HOST" ] || [ -z "$FTP_USER" ] || [ -z "$FTP_PASSWORD" ]; then
