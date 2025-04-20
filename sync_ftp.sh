@@ -94,7 +94,7 @@ echo "Backup Directory: $BACKUP_DIR_NAME"
 echo "Files to upload: ${LOCAL_ARCHIVE_BASENAME}*"
 echo "Retain backups: $RETAIN_BACKUPS"
 
-# Use lftp to create directory, upload the file(s), and manage retention
+# First: Upload the new backup
 LFTP_COMMANDS=$(cat <<EOF
 set cmd:fail-exit no;
 set ftp:ssl-allow no;
@@ -112,39 +112,79 @@ for vol_file in "${VOLUME_FILES[@]}"; do
     LFTP_COMMANDS+=$(printf "\nput '%s'" "$vol_file")
 done
 
-# Add the remaining commands for retention and quit
-# List directories matching the pattern, sort by time (implicitly newest first with glob), skip the newest ones, and remove the rest.
 LFTP_COMMANDS+=$(cat <<EOF
 
-cd ..
-cls -1 --sort=name backup_* | tac | sed -e 's#/##g' | tail -n +$(($RETAIN_BACKUPS + 1)) | xargs -r rmdir
 quit
 EOF
 )
 
-# Execute the lftp commands
-echo "Executing LFTP commands..."
-# Optional: Uncomment below to debug the generated lftp script
-# echo "$LFTP_COMMANDS"
+# Execute the lftp commands for upload
+echo "Executing LFTP upload commands..."
 echo "$LFTP_COMMANDS" | lftp
 
-# Check the exit status of lftp
-if [ $? -eq 0 ]; then
-    echo "FTP sync completed successfully."
-else
-    echo "Error: FTP sync failed."
-    # Clean up temporary files even on failure
+# Check if upload was successful
+if [ $? -ne 0 ]; then
+    echo "Error: FTP upload failed."
+    # Clean up temporary files on failure
     echo "Cleaning up temporary files..."
     rm -rf "$TEMP_DIR"
-    # Remove local volumes carefully using find
     find /tmp -maxdepth 1 -name "${LOCAL_ARCHIVE_BASENAME}*" -delete
     exit 1
 fi
 
-# Clean up temporary files on success
-echo "Cleaning up temporary files..."
-rm -rf "$TEMP_DIR"
-# Remove local volumes carefully using find
-find /tmp -maxdepth 1 -name "${LOCAL_ARCHIVE_BASENAME}*" -delete
+echo "Upload successful. Now retrieving backup directory list..."
 
-exit 0
+# Second: Get list of backup directories
+BACKUP_LIST=$(lftp -c "
+set ftp:ssl-allow no;
+open -u \"$FTP_USER\",\"$FTP_PASSWORD\" \"$FTP_HOST\";
+cd \"$FTP_TARGET_DIR\";
+cls -1 --sort=name;
+" 2>&1 | grep "^backup_[0-9]\{8\}_[0-9]\{6\}" || true)
+
+echo "Backup directories retrieved:"
+echo "$BACKUP_LIST"
+
+# Third: Process the list and determine which ones to delete
+echo "Processing backup list for retention..."
+BACKUP_COUNT=$(echo "$BACKUP_LIST" | wc -l)
+echo "Found $BACKUP_COUNT backups"
+
+if [ $BACKUP_COUNT -gt $RETAIN_BACKUPS ]; then
+    # Calculate how many to delete
+    DELETE_COUNT=$((BACKUP_COUNT - RETAIN_BACKUPS))
+    echo "Will delete $DELETE_COUNT old backups (keeping $RETAIN_BACKUPS most recent)"
+    
+    # Get list of directories to delete (oldest first)
+    DIRS_TO_DELETE=$(echo "$BACKUP_LIST" | head -n $DELETE_COUNT)
+    
+    # Fourth: Execute deletion if needed
+    if [ -n "$DIRS_TO_DELETE" ]; then
+        echo "Removing old backups..."
+        
+        # Build the deletion commands
+        DEL_COMMANDS="set ftp:ssl-allow no;
+open -u \"$FTP_USER\",\"$FTP_PASSWORD\" \"$FTP_HOST\";
+cd \"$FTP_TARGET_DIR\";"
+        
+        # Add each directory to the delete commands
+        while read -r dir; do
+            DEL_COMMANDS+="
+echo \"Deleting $dir\";
+rm -rf \"$dir\";"
+        done <<< "$DIRS_TO_DELETE"
+        
+        # Execute the deletion
+        echo "$DEL_COMMANDS" | lftp
+        
+        if [ $? -eq 0 ]; then
+            echo "Old backups successfully removed"
+        else
+            echo "Warning: Failed to remove some old backups"
+        fi
+    fi
+else
+    echo "No old backups need to be deleted (keeping $RETAIN_BACKUPS)"
+fi
+
+echo "FTP sync completed successfully."

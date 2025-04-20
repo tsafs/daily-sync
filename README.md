@@ -90,58 +90,18 @@ docker run -d \
 ```
 *Note: Ensure the target directory (`/path/to/target/directory` on the host) exists. The ownership of the synced file will automatically match the ownership of the `/path/to/target/directory` on the host.*
 
-### Debug Mode - WebDAV Sync
+### Debug Mode
 
-Run the container in debug mode to test the WebDAV sync process manually:
+Run the container in debug mode to test the sync process manually. This will essentially skip using cron entirely.
 
 ```bash
 docker run --rm \
     -v ./test_data:/data:ro \
     -e SYNC_MODE="webdav" \
-    -e WEBDAV_URL="https://<webdav-host>/remote.php/dav/files/<username>/<folder>" \
-    -e WEBDAV_USERNAME="<username>" \
-    -e WEBDAV_PASSWORD="<password>" \
-    -e WEBDAV_TARGET_DIR="<target-directory>" \
-    -e USE_ENCRYPTION=true \
-    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
+    ... \
     -e DEBUG=true \
-    ghcr.io/tsafs/daily-sync:latest
+    ghcr.io/tsafs/daily-sync:latests
 ```
-
-### Debug Mode - FTP Sync
-
-Run the container in debug mode to test the FTP sync process manually:
-
-```bash
-docker run --rm \
-    -v ./test_data:/data:ro \
-    -e SYNC_MODE="ftp" \
-    -e FTP_HOST="<ftp-host>" \
-    -e FTP_USER="<username>" \
-    -e FTP_PASSWORD="<password>" \
-    -e FTP_TARGET_DIR="<target-directory>" \
-    -e USE_ENCRYPTION=true \
-    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
-    -e DEBUG=true \
-    ghcr.io/tsafs/daily-sync:latest
-```
-
-### Debug Mode - Directory Sync
-
-Run the container in debug mode to test the directory sync process manually:
-
-```bash
-docker run --rm \
-    -v ./test_data:/data:ro \
-    -v ./test_target:/target \
-    -e SYNC_MODE="directory" \
-    -e USE_ENCRYPTION=true \
-    -e ENCRYPTION_PASSWORD="<password-for-encryption>" \
-    -e DEBUG=true \
-    ghcr.io/tsafs/daily-sync:latest
-```
-*Note: Ensure the target directory (`./test_target` in this example) exists. The ownership of the synced file will automatically match the ownership of the `./test_target` directory.*
-
 
 ## Run the Container with Docker Compose
 
