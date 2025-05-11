@@ -1,6 +1,29 @@
 #!/bin/bash
 set -e
 
+# Add cleanup function to ensure all temp files are removed
+cleanup() {
+    local exit_code=$?
+    echo "Running cleanup..."
+    # Remove the temporary data directory
+    [ -d "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
+    
+    # Remove all archive files (both volume parts and single archives)
+    if [ -n "$ARCHIVE_BASE_NAME" ]; then
+        # Find and remove all archive files based on the base name pattern
+        find /tmp -maxdepth 1 -name "${LOCAL_ARCHIVE_BASENAME}*" -delete
+    fi
+    
+    # Also clean any old temporary files from failed previous runs (older than 1 day)
+    find /tmp -maxdepth 1 -name "encrypted_data_*" -o -name "data_*" -type f -mtime +1 -delete
+    
+    echo "Cleanup complete."
+    exit $exit_code
+}
+
+# Set trap to ensure cleanup happens even if script fails
+trap cleanup EXIT
+
 # Source environment variables
 if [ -f /etc/environment ]; then
     . /etc/environment
@@ -81,7 +104,6 @@ VOLUME_FILES=($(find /tmp -maxdepth 1 -name "${LOCAL_ARCHIVE_BASENAME}*" -print)
 PART_COUNT=${#VOLUME_FILES[@]}
 if [[ "$PART_COUNT" -eq 0 ]]; then
     echo "Error: No archive files found after 7z command. Check if 7z command was successful and data was present."
-    rm -rf "$TEMP_DIR"
     exit 1
 fi
 echo "Created $PART_COUNT archive part(s)"
@@ -124,10 +146,6 @@ echo "$LFTP_COMMANDS" | lftp
 # Check if upload was successful
 if [ $? -ne 0 ]; then
     echo "Error: FTP upload failed."
-    # Clean up temporary files on failure
-    echo "Cleaning up temporary files..."
-    rm -rf "$TEMP_DIR"
-    find /tmp -maxdepth 1 -name "${LOCAL_ARCHIVE_BASENAME}*" -delete
     exit 1
 fi
 
@@ -186,4 +204,5 @@ else
     echo "No old backups need to be deleted (keeping $RETAIN_BACKUPS)"
 fi
 
+# Cleanup handled by trap EXIT
 echo "FTP sync completed successfully."

@@ -8,6 +8,32 @@
 
 set -e
 
+# Add cleanup function to ensure all temp files are removed
+cleanup() {
+    local exit_code=$?
+    echo "Running cleanup..."
+    # Remove the temporary data directory and rclone config
+    [ -d "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
+    [ -f "$RCLONE_CONFIG_FILE" ] && rm -f "$RCLONE_CONFIG_FILE"
+    
+    # Remove all archive files (both volume parts and single archives)
+    if [ -n "$ARCHIVE_BASE_NAME" ]; then
+        # Clean volume parts (e.g., .zip.001, .zip.002)
+        find /tmp -maxdepth 1 -name "$(basename ${ARCHIVE_BASE_NAME})${ARCHIVE_EXT}.*" -delete
+        # Clean single archive if it exists (e.g., .zip)
+        [ -f "${ARCHIVE_BASE_NAME}${ARCHIVE_EXT}" ] && rm -f "${ARCHIVE_BASE_NAME}${ARCHIVE_EXT}"
+    fi
+    
+    # Also clean any old temporary files from failed previous runs (older than 1 day)
+    find /tmp -maxdepth 1 -name "encrypted_data_*" -o -name "data_*" -type f -mtime +1 -delete
+    
+    echo "Cleanup complete."
+    exit $exit_code
+}
+
+# Set trap to ensure cleanup happens even if script fails
+trap cleanup EXIT
+
 # Source environment variables
 if [ -f /etc/environment ]; then
     . /etc/environment
@@ -67,7 +93,6 @@ EOF
 
 # Create a temporary directory for processing
 TEMP_DIR=$(mktemp -d)
-# SPLIT_DIR is no longer needed
 
 # Copy the data directory to the temporary directory
 echo "Copying data directory to temporary location..."
@@ -99,18 +124,18 @@ find /tmp -maxdepth 1 -name "$(basename ${ARCHIVE_BASE_NAME})${ARCHIVE_EXT}.*" -
 VOLUME_FILES=($(find /tmp -maxdepth 1 -name "$(basename ${ARCHIVE_BASE_NAME})${ARCHIVE_EXT}.*" -print))
 PART_COUNT=${#VOLUME_FILES[@]}
 if [[ "$PART_COUNT" -eq 0 ]]; then
-    echo "Warning: No volume files found. Check if 7z command was successful and data was present."
-    # Decide if you want to exit or continue (e.g., upload an empty manifest?)
-    # For now, we'll continue and potentially upload just a manifest
+    echo "Warning: No archive files found. Check if 7z command was successful and data was present."
+    # Exit with error since no files were created
+    exit 1
 fi
-echo "Created $PART_COUNT volumes"
+echo "Created $PART_COUNT archive file(s)"
 
 # Create the target backup directory on WebDAV
 echo "Creating target directory on WebDAV: $WEBDAV_BACKUP_PATH"
 rclone mkdir "$RCLONE_REMOTE:$WEBDAV_BACKUP_PATH" --config "$RCLONE_CONFIG_FILE"
 
 # Upload each volume to the specific backup directory on WebDAV
-echo "Uploading volumes to $WEBDAV_BACKUP_PATH ..."
+echo "Uploading archives to $WEBDAV_BACKUP_PATH ..."
 for volume in "${VOLUME_FILES[@]}"; do
     if [ -f "$volume" ]; then # Check if it's a file
         volume_name=$(basename "$volume")
@@ -141,12 +166,5 @@ else
     echo "No old backup directories to delete."
 fi
 
-
-# Clean up temporary files
-echo "Cleaning up temporary files..."
-# Remove the temporary data directory, the local manifest, and rclone config
-rm -rf "$TEMP_DIR" "$RCLONE_CONFIG_FILE"
-# Remove local volumes carefully using find
-find /tmp -maxdepth 1 -name "$(basename ${ARCHIVE_BASE_NAME})${ARCHIVE_EXT}.*" -delete
-
+# Cleanup handled by trap EXIT
 echo "Sync complete."

@@ -8,6 +8,27 @@
 
 set -e
 
+# Add cleanup function to ensure all temp files are removed
+cleanup() {
+    local exit_code=$?
+    echo "Running cleanup..."
+    
+    # Remove the temporary directory
+    [ -d "$TEMP_DIR" ] && rm -rf "$TEMP_DIR"
+    
+    # Remove any archive files that may have been left behind
+    [ -f "$ARCHIVE_FILE" ] && rm -f "$ARCHIVE_FILE"
+    
+    # Also clean any old temporary files from failed previous runs (older than 1 day)
+    find /tmp -maxdepth 1 -name "encrypted_data_*" -o -name "data_*" -type f -mtime +1 -delete
+    
+    echo "Cleanup complete."
+    exit $exit_code
+}
+
+# Set trap to ensure cleanup happens even if script fails
+trap cleanup EXIT
+
 # Source environment variables
 if [ -f /etc/environment ]; then
     . /etc/environment
@@ -79,8 +100,5 @@ else
     echo "No old backups to delete."
 fi
 
-# Clean up temporary files
-echo "Cleaning up temporary files..."
-rm -rf "$TEMP_DIR" "$ARCHIVE_FILE"
-
+# Cleanup handled by trap EXIT
 echo "Directory sync complete."
