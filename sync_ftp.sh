@@ -10,13 +10,15 @@ cleanup() {
     
     # Remove all archive files (both volume parts and single archives)
     if [ -n "$ARCHIVE_BASE_NAME" ]; then
-        # Find and remove all archive files based on the base name pattern
         find /tmp -maxdepth 1 -name "${LOCAL_ARCHIVE_BASENAME}*" -delete
     fi
-    
-    # Also clean any old temporary files from failed previous runs (older than 1 day)
+
+    # Clean up old temp files from failed previous runs (older than 1 day)
     find /tmp -maxdepth 1 -name "encrypted_data_*" -o -name "data_*" -type f -mtime +1 -delete
-    
+
+    # Clean up old temp directories from failed previous runs (older than 1 day)
+    find /tmp -maxdepth 1 -type d -name "tmp.*" -exec rm -rf {} +
+
     echo "Cleanup complete."
     exit $exit_code
 }
