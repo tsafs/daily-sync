@@ -143,7 +143,14 @@ EOF
 
 # Execute the lftp commands for upload
 echo "Executing LFTP upload commands..."
-echo "$LFTP_COMMANDS" | lftp
+timeout 1200 bash -c "echo \"$LFTP_COMMANDS\" | lftp" 2>&1 | tee /tmp/lftp_upload.log
+if [ $? -ne 0 ]; then
+    echo "Error: FTP upload failed or timed out after 20 minutes. See /tmp/lftp_upload.log for details."
+    echo "---- lftp error log ----"
+    cat /tmp/lftp_upload.log
+    echo "------------------------"
+    exit 1
+fi
 
 # Check if upload was successful
 if [ $? -ne 0 ]; then
