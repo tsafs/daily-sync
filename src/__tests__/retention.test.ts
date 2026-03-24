@@ -20,16 +20,6 @@ function entry(dateStr: string, time = '020000'): BackupEntry {
     return parsed;
 }
 
-/** Shorthand: extract just the names from a retention result's delete list. */
-function deletedNames(
-    backups: BackupEntry[],
-    config: GfsConfig,
-    now: Date,
-): string[] {
-    const result = evaluateRetention(backups, config, now);
-    return result.delete.map((e) => e.name).sort();
-}
-
 /** Shorthand: extract just the names from a retention result's keep list. */
 function keptNames(
     backups: BackupEntry[],
