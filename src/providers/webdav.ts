@@ -147,7 +147,9 @@ function isWebDavNotFound(err: unknown): boolean {
 /**
  * Check if a WebDAV error indicates a resource already exists (405 or 409).
  * 405 = Method Not Allowed (directory exists on most servers)
- * 409 = Conflict (parent exists, used by some servers)
+ * 409 = Conflict — can mean "parent doesn't exist" on some servers, but safe to
+ *       treat as "already exists" here because mkdir() creates segments top-down,
+ *       so parents are always created before children.
  */
 function isWebDavAlreadyExists(err: unknown): boolean {
     if (err && typeof err === 'object' && 'status' in err) {
