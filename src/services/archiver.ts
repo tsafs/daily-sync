@@ -93,7 +93,7 @@ export class ArchiverService {
             };
         } catch (err) {
             // Clean up temp dir on failure
-            await rm(tempDir, { recursive: true, force: true }).catch(() => {});
+            await rm(tempDir, { recursive: true, force: true }).catch(() => { });
             throw err;
         }
     }
