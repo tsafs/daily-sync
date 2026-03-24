@@ -126,8 +126,15 @@ Given a provider, remote path, and GFS config, this service:
 
 Uses `node-cron` (lightweight, no system cron dependency).
 
-- Parses the same `CRON_TIME` + `CRON_DAYS` format for backward compatibility
-- In debug mode, runs immediately and exits
+- Accepts a standard 5-field cron expression (`"MIN HOUR DOM MON DOW"`) via `SchedulerConfig.cron`
+- Validates expressions using `node-cron`'s built-in validator (also supports optional 6-field with seconds)
+- In debug mode, runs the task immediately (awaited) and returns without scheduling
+- In scheduled mode, registers via `cron.schedule()` with optional IANA timezone support
+- Overlap prevention: skips a cron tick if the previous task is still running, with a warning log
+- Accepts a `Logger` interface (with `info` / `warn` / `error` methods) for structured logging — defaults to `console` so it works standalone but integrates with `pino` when the logger service is wired up
+- Logs a heartbeat on every cron tick (before running the task) so operators can confirm the process is alive from logs
+- Task errors in scheduled mode are logged and emitted via an optional `onError` callback — never crash the process
+- Returns a `ScheduleHandle` with `immediate` flag and `stop()` for lifecycle control
 - Removes the dependency on system cron and the fragile `/etc/environment` serialization hack
 
 ### 9. Build the config loader — `src/config.ts`
@@ -331,8 +338,7 @@ RETAIN_MONTHLY=6     # Keep 1 backup per month for the last 6 months
 | `RETAIN_WEEKLY` | `4` | all | no | GFS weekly tier |
 | `RETAIN_MONTHLY` | `6` | all | no | GFS monthly tier |
 | `CHUNK_SIZE_MB` | `0` | all | no | Multi-volume split size |
-| `CRON_TIME` | `0 2` | all | no | `"MIN HOUR"` format |
-| `CRON_DAYS` | `*` | all | no | Day-of-week (`*`, `0-6`, `1,3,5`) |
+| `CRON_SCHEDULE` | `0 2 * * *` | all | no | Standard 5-field cron expression |
 | `DEBUG` | `false` | all | no | Run immediately and exit |
 | `TIMEZONE` | — | all | no | e.g. `Europe/Berlin` |
 | `NOTIFY_ON_FAILURE` | `true` | all | no | Send email on backup failure |
