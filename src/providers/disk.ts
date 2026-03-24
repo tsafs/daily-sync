@@ -1,7 +1,7 @@
-import { copyFile, readdir, mkdir, rm, stat, chown, access } from 'node:fs/promises';
+import { copyFile, readdir, mkdir, rm, stat, chown } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
-import { constants } from 'node:fs';
 import type { BackupProvider, DiskProviderConfig, RemoteEntry } from './provider.js';
+import { type Logger, createSilentLogger } from '../services/logger.js';
 
 /**
  * Backup provider for local/NAS directory targets.
@@ -16,12 +16,16 @@ export class DiskProvider implements BackupProvider {
     private targetDir: string;
     private ownerUid: number | undefined;
     private ownerGid: number | undefined;
+    private readonly log: Logger;
 
-    constructor(private readonly config: DiskProviderConfig) {
+    constructor(private readonly config: DiskProviderConfig, logger?: Logger) {
         this.targetDir = config.targetDir;
+        this.log = (logger ?? createSilentLogger()).child({ provider: 'disk' });
     }
 
     async initialize(): Promise<void> {
+        this.log.info({ targetDir: this.targetDir }, 'Initializing disk provider');
+
         // Ensure target directory exists
         await mkdir(this.targetDir, { recursive: true });
 
@@ -30,15 +34,20 @@ export class DiskProvider implements BackupProvider {
             const stats = await stat(this.targetDir);
             this.ownerUid = stats.uid;
             this.ownerGid = stats.gid;
+            this.log.debug({ uid: stats.uid, gid: stats.gid }, 'Target directory ownership detected');
         } catch {
             // If we can't stat (shouldn't happen after mkdir), skip ownership matching
             this.ownerUid = undefined;
             this.ownerGid = undefined;
+            this.log.warn('Could not detect target directory ownership — skipping chown');
         }
+
+        this.log.info('Disk provider initialized');
     }
 
     async upload(localPath: string, remotePath: string): Promise<void> {
         const fullPath = this.resolvePath(remotePath);
+        this.log.info({ remotePath }, 'Uploading file');
 
         // Ensure parent directory exists
         await mkdir(dirname(fullPath), { recursive: true });
@@ -48,20 +57,25 @@ export class DiskProvider implements BackupProvider {
 
         // Match ownership to target directory
         await this.matchOwnership(fullPath);
+        this.log.debug({ remotePath }, 'Upload complete');
     }
 
     async list(remotePath: string): Promise<RemoteEntry[]> {
         const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Listing directory');
 
         try {
             const entries = await readdir(fullPath, { withFileTypes: true });
-            return entries.map((entry) => ({
+            const result = entries.map((entry) => ({
                 name: entry.name,
                 isDirectory: entry.isDirectory(),
             }));
+            this.log.debug({ remotePath, count: result.length }, 'Directory listed');
+            return result;
         } catch (err: unknown) {
             // If directory doesn't exist, return empty list
             if (isNodeError(err) && err.code === 'ENOENT') {
+                this.log.debug({ remotePath }, 'Directory does not exist — returning empty list');
                 return [];
             }
             throw err;
@@ -70,12 +84,15 @@ export class DiskProvider implements BackupProvider {
 
     async delete(remotePath: string): Promise<void> {
         const fullPath = this.resolvePath(remotePath);
+        this.log.info({ remotePath }, 'Deleting path');
 
         try {
             await rm(fullPath, { recursive: true, force: true });
+            this.log.debug({ remotePath }, 'Delete complete');
         } catch (err: unknown) {
             // Ignore "not found" — delete is idempotent
             if (isNodeError(err) && err.code === 'ENOENT') {
+                this.log.debug({ remotePath }, 'Path not found — nothing to delete');
                 return;
             }
             throw err;
@@ -84,11 +101,13 @@ export class DiskProvider implements BackupProvider {
 
     async mkdir(remotePath: string): Promise<void> {
         const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Creating directory');
         await mkdir(fullPath, { recursive: true });
         await this.matchOwnership(fullPath);
     }
 
     async dispose(): Promise<void> {
+        this.log.debug('Disposing disk provider');
         // No resources to release for local filesystem
     }
 

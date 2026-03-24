@@ -3,16 +3,19 @@ import {
     validateCronExpression,
     SchedulerService,
     type SchedulerConfig,
-    type SchedulerLogger,
 } from '../services/scheduler.js';
+import type { Logger } from '../services/logger.js';
 
 /** Silent logger for tests — captures nothing, prevents console noise. */
-function createTestLogger(): SchedulerLogger {
-    return {
+function createTestLogger(): Logger & { info: ReturnType<typeof vi.fn>; warn: ReturnType<typeof vi.fn>; error: ReturnType<typeof vi.fn> } {
+    const logger: any = {
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),
+        debug: vi.fn(),
+        child: vi.fn(() => logger),
     };
+    return logger;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +95,7 @@ describe('validateCronExpression', () => {
 
 describe('SchedulerService', () => {
     let scheduler: SchedulerService;
-    let logger: SchedulerLogger;
+    let logger: ReturnType<typeof createTestLogger>;
 
     beforeEach(() => {
         logger = createTestLogger();

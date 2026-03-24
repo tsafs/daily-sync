@@ -3,6 +3,7 @@ import { cp, mkdtemp, rm, readdir, chmod } from 'node:fs/promises';
 import { join, basename } from 'node:path';
 import { tmpdir } from 'node:os';
 import { promisify } from 'node:util';
+import { type Logger, createSilentLogger } from './logger.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -41,6 +42,12 @@ export interface ArchiveResult {
  * after upload.
  */
 export class ArchiverService {
+    private readonly log: Logger;
+
+    constructor(logger?: Logger) {
+        this.log = (logger ?? createSilentLogger()).child({ service: 'archiver' });
+    }
+
     /**
      * Create an archive from the source directory.
      *
@@ -54,11 +61,16 @@ export class ArchiverService {
 
         // Create a temp working directory
         const tempDir = await mkdtemp(join(tmpdir(), 'daily-sync-'));
+        this.log.info(
+            { sourceDir: options.sourceDir, encrypt: options.encrypt, chunkSizeMb: options.chunkSizeMb },
+            'Creating archive',
+        );
 
         try {
             // Copy source data to temp directory
             const dataDir = join(tempDir, 'data');
             await cp(options.sourceDir, dataDir, { recursive: true });
+            this.log.debug('Source data copied to temp directory');
 
             // Ensure readable permissions on the copied data
             await chmod(dataDir, 0o755).catch(() => {
@@ -75,7 +87,9 @@ export class ArchiverService {
             const args = this.build7zArgs(archivePath, dataDir, options);
 
             // Execute 7z
+            this.log.debug('Running 7z');
             await execFileAsync('7z', args);
+            this.log.debug('7z completed');
 
             // Find the created archive files
             const files = await this.findArchiveFiles(tempDir, baseName);
@@ -86,6 +100,11 @@ export class ArchiverService {
                 );
             }
 
+            this.log.info(
+                { baseName, fileCount: files.length },
+                'Archive created successfully',
+            );
+
             return {
                 files,
                 baseName,
@@ -93,6 +112,7 @@ export class ArchiverService {
             };
         } catch (err) {
             // Clean up temp dir on failure
+            this.log.error({ err }, 'Archive creation failed — cleaning up temp directory');
             await rm(tempDir, { recursive: true, force: true }).catch(() => { });
             throw err;
         }
@@ -103,6 +123,7 @@ export class ArchiverService {
      * Safe to call multiple times.
      */
     async cleanup(tempDir: string): Promise<void> {
+        this.log.debug({ tempDir }, 'Cleaning up temp directory');
         await rm(tempDir, { recursive: true, force: true });
     }
 

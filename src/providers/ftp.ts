@@ -1,6 +1,7 @@
 import { posix } from 'node:path';
 import { Client as FtpClient } from 'basic-ftp';
 import type { BackupProvider, FtpProviderConfig, RemoteEntry } from './provider.js';
+import { type Logger, createSilentLogger } from '../services/logger.js';
 
 /**
  * Backup provider for FTP targets.
@@ -14,12 +15,19 @@ export class FtpProvider implements BackupProvider {
 
     private client: FtpClient | null = null;
     private targetDir: string;
+    private readonly log: Logger;
 
-    constructor(private readonly config: FtpProviderConfig) {
+    constructor(private readonly config: FtpProviderConfig, logger?: Logger) {
         this.targetDir = config.targetDir;
+        this.log = (logger ?? createSilentLogger()).child({ provider: 'ftp' });
     }
 
     async initialize(): Promise<void> {
+        this.log.info(
+            { host: this.config.host, port: this.config.port, tls: this.config.tls, targetDir: this.targetDir },
+            'Initializing FTP provider',
+        );
+
         this.client = new FtpClient();
 
         // Connect and authenticate
@@ -31,34 +39,44 @@ export class FtpProvider implements BackupProvider {
             secure: this.config.tls,
         });
 
+        this.log.debug('FTP connection established');
+
         // Ensure target directory exists
         await this.client.ensureDir(this.targetDir);
         // ensureDir changes the working directory — go back to root
         await this.client.cd('/');
+
+        this.log.info('FTP provider initialized');
     }
 
     async upload(localPath: string, remotePath: string): Promise<void> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.info({ remotePath }, 'Uploading file');
 
         await client.uploadFrom(localPath, fullPath);
+        this.log.debug({ remotePath }, 'Upload complete');
     }
 
     async list(remotePath: string): Promise<RemoteEntry[]> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Listing directory');
 
         try {
             const entries = await client.list(fullPath);
-            return entries
+            const result = entries
                 .filter((entry) => entry.name !== '.' && entry.name !== '..')
                 .map((entry) => ({
                     name: entry.name,
                     isDirectory: entry.isDirectory,
                 }));
+            this.log.debug({ remotePath, count: result.length }, 'Directory listed');
+            return result;
         } catch (err: unknown) {
             // If directory doesn't exist, return empty list
             if (isFtpNotFound(err)) {
+                this.log.debug({ remotePath }, 'Directory not found — returning empty list');
                 return [];
             }
             throw err;
@@ -68,17 +86,21 @@ export class FtpProvider implements BackupProvider {
     async delete(remotePath: string): Promise<void> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.info({ remotePath }, 'Deleting path');
 
         try {
             // Try to remove as directory first (recursive)
             await client.removeDir(fullPath);
+            this.log.debug({ remotePath }, 'Directory deleted');
         } catch {
             // If removeDir fails, try as a file
             try {
                 await client.remove(fullPath);
+                this.log.debug({ remotePath }, 'File deleted');
             } catch (err: unknown) {
                 // Ignore "not found" — delete is idempotent
                 if (isFtpNotFound(err)) {
+                    this.log.debug({ remotePath }, 'Path not found — nothing to delete');
                     return;
                 }
                 throw err;
@@ -89,6 +111,7 @@ export class FtpProvider implements BackupProvider {
     async mkdir(remotePath: string): Promise<void> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Creating directory');
 
         await client.ensureDir(fullPath);
         // ensureDir changes the working directory — go back to root
@@ -96,9 +119,11 @@ export class FtpProvider implements BackupProvider {
     }
 
     async dispose(): Promise<void> {
+        this.log.debug('Disposing FTP provider');
         if (this.client) {
             this.client.close();
             this.client = null;
+            this.log.info('FTP connection closed');
         }
     }
 

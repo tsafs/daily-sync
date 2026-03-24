@@ -3,6 +3,7 @@ import { stat } from 'node:fs/promises';
 import { join, posix } from 'node:path';
 import { createClient, type WebDAVClient, type FileStat } from 'webdav';
 import type { BackupProvider, WebDavProviderConfig, RemoteEntry } from './provider.js';
+import { type Logger, createSilentLogger } from '../services/logger.js';
 
 /**
  * Backup provider for WebDAV targets.
@@ -15,12 +16,16 @@ export class WebDavProvider implements BackupProvider {
 
     private client: WebDAVClient | null = null;
     private targetDir: string;
+    private readonly log: Logger;
 
-    constructor(private readonly config: WebDavProviderConfig) {
+    constructor(private readonly config: WebDavProviderConfig, logger?: Logger) {
         this.targetDir = config.targetDir;
+        this.log = (logger ?? createSilentLogger()).child({ provider: 'webdav' });
     }
 
     async initialize(): Promise<void> {
+        this.log.info({ url: this.config.url, targetDir: this.targetDir }, 'Initializing WebDAV provider');
+
         this.client = createClient(this.config.url, {
             username: this.config.username,
             password: this.config.password,
@@ -28,6 +33,7 @@ export class WebDavProvider implements BackupProvider {
 
         // Ensure the target directory exists on the remote
         await this.mkdir(this.targetDir);
+        this.log.info('WebDAV provider initialized');
     }
 
     async upload(localPath: string, remotePath: string): Promise<void> {
@@ -38,25 +44,33 @@ export class WebDavProvider implements BackupProvider {
         const fileStream = createReadStream(localPath);
         const fileStat = await stat(localPath);
 
+        this.log.info({ remotePath, size: fileStat.size }, 'Uploading file');
+
         await client.putFileContents(fullPath, fileStream, {
             overwrite: true,
             contentLength: fileStat.size,
         });
+
+        this.log.debug({ remotePath, size: fileStat.size }, 'Upload complete');
     }
 
     async list(remotePath: string): Promise<RemoteEntry[]> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Listing directory');
 
         try {
             const contents = (await client.getDirectoryContents(fullPath)) as FileStat[];
-            return contents.map((item) => ({
+            const result = contents.map((item) => ({
                 name: item.basename,
                 isDirectory: item.type === 'directory',
             }));
+            this.log.debug({ remotePath, count: result.length }, 'Directory listed');
+            return result;
         } catch (err: unknown) {
             // If directory doesn't exist (404), return empty list
             if (isWebDavNotFound(err)) {
+                this.log.debug({ remotePath }, 'Directory not found — returning empty list');
                 return [];
             }
             throw err;
@@ -66,12 +80,15 @@ export class WebDavProvider implements BackupProvider {
     async delete(remotePath: string): Promise<void> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.info({ remotePath }, 'Deleting path');
 
         try {
             await client.deleteFile(fullPath);
+            this.log.debug({ remotePath }, 'Delete complete');
         } catch (err: unknown) {
             // Ignore "not found" — delete is idempotent
             if (isWebDavNotFound(err)) {
+                this.log.debug({ remotePath }, 'Path not found — nothing to delete');
                 return;
             }
             throw err;
@@ -81,6 +98,7 @@ export class WebDavProvider implements BackupProvider {
     async mkdir(remotePath: string): Promise<void> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Creating directory');
 
         // Create each segment of the path, since WebDAV doesn't support
         // recursive directory creation natively
@@ -102,6 +120,7 @@ export class WebDavProvider implements BackupProvider {
     }
 
     async dispose(): Promise<void> {
+        this.log.debug('Disposing WebDAV provider');
         // The webdav client is stateless (HTTP) — no connection to close
         this.client = null;
     }

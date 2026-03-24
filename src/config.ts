@@ -7,6 +7,7 @@ import type {
     FtpProviderConfig,
 } from './providers/provider.js';
 import type { GfsConfig } from './services/retention.js';
+import type { Logger } from './services/logger.js';
 
 // ---------------------------------------------------------------------------
 // Public types
@@ -329,6 +330,7 @@ function formatErrors(error: Joi.ValidationError): string {
  */
 export function loadConfig(
     env: Record<string, string | undefined> = process.env,
+    logger?: Logger,
 ): AppConfig {
     const { error, value } = envSchema.validate(cleanEnv(env));
 
@@ -338,7 +340,7 @@ export function loadConfig(
 
     const v = value as ValidatedEnv;
 
-    return {
+    const config: AppConfig = {
         syncMode: v.SYNC_MODE,
         provider: buildProviderConfig(v),
         archive: {
@@ -357,4 +359,24 @@ export function loadConfig(
         debug: v.DEBUG,
         notification: buildNotificationConfig(v),
     };
+
+    if (logger) {
+        logger.info(
+            {
+                syncMode: config.syncMode,
+                cron: config.cron,
+                timezone: config.timezone ?? 'system',
+                debug: config.debug,
+                encryption: config.archive.encrypt,
+                chunkSizeMb: config.archive.chunkSizeMb,
+                retention: config.retention,
+                notifications: config.notification
+                    ? { onFailure: config.notification.onFailure, onSuccess: config.notification.onSuccess }
+                    : 'disabled',
+            },
+            'Configuration loaded',
+        );
+    }
+
+    return config;
 }

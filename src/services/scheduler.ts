@@ -1,21 +1,15 @@
 import cron from 'node-cron';
+import { type Logger, createSilentLogger } from './logger.js';
+
+// ---------------------------------------------------------------------------
+// Backward-compatible alias
+// ---------------------------------------------------------------------------
 
 /**
- * Minimal logger interface accepted by the scheduler.
- * Matches pino's API surface so you can pass a pino instance directly,
- * but defaults to `console` for standalone / test usage.
+ * @deprecated Use {@link Logger} from './logger.js' directly.
+ * Kept for backward compatibility with existing consumers.
  */
-export interface SchedulerLogger {
-    info(msg: string): void;
-    warn(msg: string): void;
-    error(msg: string): void;
-}
-
-const defaultLogger: SchedulerLogger = {
-    info: (msg) => console.log(msg),
-    warn: (msg) => console.warn(msg),
-    error: (msg) => console.error(msg),
-};
+export type SchedulerLogger = Logger;
 
 /**
  * Scheduler configuration.
@@ -97,10 +91,10 @@ export function validateCronExpression(expression: string): void {
  * In debug mode, the task is executed immediately without scheduling.
  */
 export class SchedulerService {
-    private readonly logger: SchedulerLogger;
+    private readonly logger: Logger;
 
-    constructor(logger?: SchedulerLogger) {
-        this.logger = logger ?? defaultLogger;
+    constructor(logger?: Logger) {
+        this.logger = (logger ?? createSilentLogger()).child({ service: 'scheduler' });
     }
 
     /**

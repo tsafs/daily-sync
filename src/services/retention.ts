@@ -1,4 +1,5 @@
 import type { BackupProvider } from '../providers/provider.js';
+import { type Logger, createSilentLogger } from './logger.js';
 
 /**
  * GFS (Grandfather-Father-Son) retention configuration.
@@ -231,15 +232,21 @@ export function evaluateRetention(
  * 4. Deletes everything not in the keep set
  */
 export class RetentionService {
+    private readonly log: Logger;
+
     constructor(
         private readonly config: GfsConfig,
-    ) { }
+        logger?: Logger,
+    ) {
+        this.log = (logger ?? createSilentLogger()).child({ service: 'retention' });
+    }
 
     /**
      * List and parse all backup directories at the given remote path.
      * Non-matching entries (files, directories with wrong naming) are ignored.
      */
     async listBackups(provider: BackupProvider, remotePath: string): Promise<BackupEntry[]> {
+        this.log.debug({ remotePath }, 'Listing remote backup directories');
         const entries = await provider.list(remotePath);
         const backups: BackupEntry[] = [];
 
@@ -256,6 +263,7 @@ export class RetentionService {
 
         // Sort oldest first
         backups.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+        this.log.debug({ count: backups.length }, 'Found backup directories');
         return backups;
     }
 
@@ -280,17 +288,40 @@ export class RetentionService {
         remotePath: string,
         now?: Date,
     ): Promise<RetentionResult> {
+        this.log.info(
+            { remotePath, daily: this.config.daily, weekly: this.config.weekly, monthly: this.config.monthly },
+            'Applying GFS retention policy',
+        );
+
         const backups = await this.listBackups(provider, remotePath);
         const result = this.evaluate(backups, now);
+
+        this.log.info(
+            {
+                totalBackups: backups.length,
+                keeping: result.keep.length,
+                deleting: result.delete.length,
+            },
+            'Retention evaluation complete',
+        );
+
+        for (const kept of result.keep) {
+            this.log.debug(
+                { backup: kept.entry.name, tiers: kept.tiers },
+                'Keeping backup',
+            );
+        }
 
         // Delete expired backups sequentially to avoid overwhelming the provider
         for (const entry of result.delete) {
             const fullPath = remotePath.endsWith('/')
                 ? `${remotePath}${entry.name}`
                 : `${remotePath}/${entry.name}`;
+            this.log.info({ backup: entry.name }, 'Deleting expired backup');
             await provider.delete(fullPath);
         }
 
+        this.log.info('Retention cleanup complete');
         return result;
     }
 }
