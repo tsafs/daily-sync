@@ -235,7 +235,7 @@ Use `vitest`:
 - **Unit tests**: config validation, GFS retention logic (many edge cases), archive filename parsing
 - **Integration tests**: each provider using test containers or mocks
 - **Test the archiver** against `test_data/small/`
-- **GFS-specific tests**: verify correct backup selection across tier boundaries, single-backup edge case, backward compatibility with `RETAIN_BACKUPS`
+- **GFS-specific tests**: verify correct backup selection across tier boundaries, single-backup edge case
 
 ### 16. Update Dockerfile
 
@@ -267,7 +267,7 @@ The provider interface is designed so a future `UsbProvider` in `src/providers/u
 
 ### Problem
 
-With simple `RETAIN_BACKUPS=3`, you keep 3 days of backups. If your database silently corrupts (bad migration, disk error, ransomware), you have a **3-day window** to notice. After that, every backup contains corrupt data.
+With a simple "keep N backups" approach, you only keep N days of backups. If your database silently corrupts (bad migration, disk error, ransomware), you have an **N-day window** to notice. After that, every backup contains corrupt data.
 
 ### Solution: Grandfather-Father-Son tiers
 
@@ -309,8 +309,6 @@ RETAIN_WEEKLY=4      # Keep 1 backup per week for the last 4 weeks
 RETAIN_MONTHLY=6     # Keep 1 backup per month for the last 6 months
 ```
 
-**Backward compatibility**: If only `RETAIN_BACKUPS` is set (old behavior), it acts as daily-only retention with no weekly/monthly tiers — identical to the current bash scripts' behavior.
-
 ---
 
 ## Environment Variable Reference
@@ -332,7 +330,6 @@ RETAIN_MONTHLY=6     # Keep 1 backup per month for the last 6 months
 | `RETAIN_DAILY` | `7` | all | no | GFS daily tier |
 | `RETAIN_WEEKLY` | `4` | all | no | GFS weekly tier |
 | `RETAIN_MONTHLY` | `6` | all | no | GFS monthly tier |
-| `RETAIN_BACKUPS` | — | all | no | Legacy: simple retention (disables GFS) |
 | `CHUNK_SIZE_MB` | `0` | all | no | Multi-volume split size |
 | `CRON_TIME` | `0 2` | all | no | `"MIN HOUR"` format |
 | `CRON_DAYS` | `*` | all | no | Day-of-week (`*`, `0-6`, `1,3,5`) |
@@ -358,7 +355,6 @@ RETAIN_MONTHLY=6     # Keep 1 backup per month for the last 6 months
 - Verify structured JSON logs appear on stdout
 - Test debug mode: immediate run + exit
 - Test cron mode: container stays alive, runs on schedule
-- Test backward compatibility: `RETAIN_BACKUPS=3` alone works identically to old behavior
 
 ---
 
