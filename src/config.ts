@@ -82,6 +82,10 @@ export interface AppConfig {
     timezone?: string;
     /** Debug mode: run backup immediately and exit */
     debug: boolean;
+    /** Log level (pino levels: trace, debug, info, warn, error, fatal) */
+    logLevel: string;
+    /** Graceful shutdown timeout in seconds (how long to wait for in-progress backup) */
+    shutdownTimeoutSecs: number;
     /** Email notification settings (null if not configured) */
     notification: NotificationConfig | null;
 }
@@ -179,6 +183,11 @@ const envSchema = Joi.object({
         return value;
     }, 'cron expression'),
     DEBUG: boolField().default(false),
+    LOG_LEVEL: Joi.string()
+        .valid('trace', 'debug', 'info', 'warn', 'error', 'fatal')
+        .insensitive()
+        .default('info'),
+    SHUTDOWN_TIMEOUT_SECS: Joi.number().integer().min(0).default(300),
     TIMEZONE: Joi.string().optional().custom((value, helpers) => {
         if (!validTimezones.has(value)) {
             return helpers.error('any.invalid');
@@ -224,6 +233,8 @@ interface ValidatedEnv {
     RETAIN_MONTHLY: number;
     CRON_SCHEDULE: string;
     DEBUG: boolean;
+    LOG_LEVEL: string;
+    SHUTDOWN_TIMEOUT_SECS: number;
     TIMEZONE?: string;
     NOTIFY_ON_FAILURE: boolean;
     NOTIFY_ON_SUCCESS: boolean;
@@ -357,6 +368,8 @@ export function loadConfig(
         cron: v.CRON_SCHEDULE,
         timezone: v.TIMEZONE,
         debug: v.DEBUG,
+        logLevel: v.LOG_LEVEL,
+        shutdownTimeoutSecs: v.SHUTDOWN_TIMEOUT_SECS,
         notification: buildNotificationConfig(v),
     };
 
@@ -367,6 +380,8 @@ export function loadConfig(
                 cron: config.cron,
                 timezone: config.timezone ?? 'system',
                 debug: config.debug,
+                logLevel: config.logLevel,
+                shutdownTimeoutSecs: config.shutdownTimeoutSecs,
                 encryption: config.archive.encrypt,
                 chunkSizeMb: config.archive.chunkSizeMb,
                 retention: config.retention,

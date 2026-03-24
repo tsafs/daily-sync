@@ -110,6 +110,16 @@ describe('loadConfig', () => {
             const config = loadConfig(diskEnv());
             expect(config.timezone).toBeUndefined();
         });
+
+        it('should default LOG_LEVEL to info', () => {
+            const config = loadConfig(diskEnv());
+            expect(config.logLevel).toBe('info');
+        });
+
+        it('should default SHUTDOWN_TIMEOUT_SECS to 300', () => {
+            const config = loadConfig(diskEnv());
+            expect(config.shutdownTimeoutSecs).toBe(300);
+        });
     });
 
     // -----------------------------------------------------------------------
@@ -580,6 +590,56 @@ describe('loadConfig', () => {
                 targetDir: '/daily-backups',
             });
             expect(config.retention).toEqual({ daily: 7, weekly: 4, monthly: 6 });
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // LOG_LEVEL
+    // -----------------------------------------------------------------------
+
+    describe('LOG_LEVEL', () => {
+        it.each(['trace', 'debug', 'info', 'warn', 'error', 'fatal'])(
+            'should accept "%s"',
+            (level) => {
+                const config = loadConfig(diskEnv({ LOG_LEVEL: level }));
+                expect(config.logLevel).toBe(level);
+            },
+        );
+
+        it('should accept case-insensitive values', () => {
+            const config = loadConfig(diskEnv({ LOG_LEVEL: 'DEBUG' }));
+            expect(config.logLevel).toBe('debug');
+        });
+
+        it('should reject invalid log levels', () => {
+            const msg = getError(diskEnv({ LOG_LEVEL: 'verbose' }));
+            expect(msg).toContain('LOG_LEVEL');
+        });
+    });
+
+    // -----------------------------------------------------------------------
+    // SHUTDOWN_TIMEOUT_SECS
+    // -----------------------------------------------------------------------
+
+    describe('SHUTDOWN_TIMEOUT_SECS', () => {
+        it('should accept a custom timeout', () => {
+            const config = loadConfig(diskEnv({ SHUTDOWN_TIMEOUT_SECS: '60' }));
+            expect(config.shutdownTimeoutSecs).toBe(60);
+        });
+
+        it('should accept 0 (no wait)', () => {
+            const config = loadConfig(diskEnv({ SHUTDOWN_TIMEOUT_SECS: '0' }));
+            expect(config.shutdownTimeoutSecs).toBe(0);
+        });
+
+        it('should reject negative values', () => {
+            const msg = getError(diskEnv({ SHUTDOWN_TIMEOUT_SECS: '-1' }));
+            expect(msg).toContain('SHUTDOWN_TIMEOUT_SECS');
+        });
+
+        it('should reject non-integer values', () => {
+            const msg = getError(diskEnv({ SHUTDOWN_TIMEOUT_SECS: '30.5' }));
+            expect(msg).toContain('SHUTDOWN_TIMEOUT_SECS');
         });
     });
 });
