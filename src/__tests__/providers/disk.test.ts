@@ -187,6 +187,39 @@ describe('DiskProvider', () => {
         });
     });
 
+    describe('download()', () => {
+        it('should return file content as a Buffer', async () => {
+            await writeFile(join(targetDir, 'archive.zip'), 'archive-bytes');
+
+            const buffer = await provider.download('archive.zip');
+
+            expect(Buffer.isBuffer(buffer)).toBe(true);
+            expect(buffer.toString('utf-8')).toBe('archive-bytes');
+        });
+
+        it('should resolve relative paths inside targetDir', async () => {
+            await mkdir(join(targetDir, 'sub'));
+            await writeFile(join(targetDir, 'sub', 'data.zip'), 'nested-data');
+
+            const buffer = await provider.download('sub/data.zip');
+
+            expect(buffer.toString('utf-8')).toBe('nested-data');
+        });
+
+        it('should handle binary content correctly', async () => {
+            const binary = Buffer.from([0x00, 0x01, 0xff, 0xfe]);
+            await writeFile(join(targetDir, 'binary.bin'), binary);
+
+            const result = await provider.download('binary.bin');
+
+            expect(result).toEqual(binary);
+        });
+
+        it('should throw for non-existent files', async () => {
+            await expect(provider.download('missing.zip')).rejects.toThrow();
+        });
+    });
+
     describe('resolvePath()', () => {
         it('should handle paths with leading slash', async () => {
             await writeFile(join(targetDir, 'root-file.txt'), 'content');

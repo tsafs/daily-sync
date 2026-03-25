@@ -35,6 +35,7 @@ const mocks = vi.hoisted(() => {
         list: vi.fn<() => Promise<[]>>().mockResolvedValue([]),
         delete: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         mkdir: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        download: vi.fn<() => Promise<Buffer>>().mockResolvedValue(Buffer.from('')),
         dispose: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
 
@@ -51,6 +52,16 @@ const mocks = vi.hoisted(() => {
         apply: vi.fn().mockResolvedValue({ keep: [], delete: [] }),
     };
 
+    const mockIntegrityInstance = {
+        verify: vi.fn().mockResolvedValue({
+            localFile: '/tmp/test/data_20260325_020000.zip',
+            remoteFile: '/target/backup_20260325_020000/data_20260325_020000.zip',
+            localChecksum: 'abc123',
+            remoteChecksum: 'abc123',
+            verified: true,
+        }),
+    };
+
     const mockSchedulerInstance = {
         schedule: vi.fn(),
     };
@@ -60,6 +71,7 @@ const mocks = vi.hoisted(() => {
         mockProviderInstance,
         mockArchiverInstance,
         mockRetentionInstance,
+        mockIntegrityInstance,
         mockSchedulerInstance,
     };
 });
@@ -83,6 +95,10 @@ vi.mock('../services/archiver.js', () => ({
 
 vi.mock('../services/retention.js', () => ({
     RetentionService: vi.fn(() => mocks.mockRetentionInstance),
+}));
+
+vi.mock('../services/integrity.js', () => ({
+    IntegrityService: vi.fn(() => mocks.mockIntegrityInstance),
 }));
 
 vi.mock('../services/scheduler.js', () => ({

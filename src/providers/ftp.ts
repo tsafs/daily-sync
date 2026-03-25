@@ -1,4 +1,5 @@
 import { posix } from 'node:path';
+import { Writable } from 'node:stream';
 import { Client as FtpClient } from 'basic-ftp';
 import type { BackupProvider, FtpProviderConfig, RemoteEntry } from './provider.js';
 import { type Logger, createSilentLogger } from '../services/logger.js';
@@ -116,6 +117,25 @@ export class FtpProvider implements BackupProvider {
         await client.ensureDir(fullPath);
         // ensureDir changes the working directory — go back to root
         await client.cd('/');
+    }
+
+    async download(remotePath: string): Promise<Buffer> {
+        const client = this.getClient();
+        const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Downloading file for integrity check');
+
+        const chunks: Buffer[] = [];
+        const writable = new Writable({
+            write(chunk, _encoding, callback) {
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
+                callback();
+            },
+        });
+
+        await client.downloadTo(writable, fullPath);
+        const buffer = Buffer.concat(chunks);
+        this.log.debug({ remotePath, bytes: buffer.byteLength }, 'Download complete');
+        return buffer;
     }
 
     async dispose(): Promise<void> {

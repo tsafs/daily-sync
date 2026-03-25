@@ -221,6 +221,15 @@ After uploading each volume, compute SHA-256 of the local file. For providers th
 
 Wrap provider upload calls with exponential backoff (3 attempts, 5s / 15s / 45s delays).
 
+The retry wraps **only `provider.upload()`** per volume. `integrity.verify()` is intentionally not retried — if the upload consistently produces a corrupted remote file after 3 attempts, the integrity failure is the correct signal to abort and clean up. Retrying verify separately would just re-download a known-corrupt file.
+
+Shape in `runBackup`:
+```ts
+for each volume:
+    await withRetry(() => provider.upload(file, remotePath))  // retried (up to 3×)
+    await integrity.verify(provider, file, remotePath)        // not retried — fatal if corrupt after retries
+```
+
 **New feature** — a transient network error no longer means a lost backup cycle.
 
 ### 14. Add email notifications — `src/services/notifier.ts`

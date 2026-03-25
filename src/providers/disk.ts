@@ -1,4 +1,4 @@
-import { copyFile, readdir, mkdir, rm, stat, chown } from 'node:fs/promises';
+import { copyFile, readFile, readdir, mkdir, rm, stat, chown } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { BackupProvider, DiskProviderConfig, RemoteEntry } from './provider.js';
 import { type Logger, createSilentLogger } from '../services/logger.js';
@@ -104,6 +104,14 @@ export class DiskProvider implements BackupProvider {
         this.log.debug({ remotePath }, 'Creating directory');
         await mkdir(fullPath, { recursive: true });
         await this.matchOwnership(fullPath);
+    }
+
+    async download(remotePath: string): Promise<Buffer> {
+        const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Downloading file for integrity check');
+        const content = await readFile(fullPath);
+        this.log.debug({ remotePath, bytes: content.byteLength }, 'Download complete');
+        return content;
     }
 
     async dispose(): Promise<void> {

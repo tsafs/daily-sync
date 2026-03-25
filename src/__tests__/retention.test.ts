@@ -685,6 +685,7 @@ describe('RetentionService', () => {
             list: vi.fn().mockResolvedValue(entries),
             delete: vi.fn().mockResolvedValue(undefined),
             mkdir: vi.fn().mockResolvedValue(undefined),
+            download: vi.fn().mockResolvedValue(Buffer.from('')),
             dispose: vi.fn().mockResolvedValue(undefined),
         };
     }
@@ -1162,6 +1163,7 @@ describe('RetentionService — Additional', () => {
             list: vi.fn().mockResolvedValue(entries),
             delete: vi.fn().mockResolvedValue(undefined),
             mkdir: vi.fn().mockResolvedValue(undefined),
+            download: vi.fn().mockResolvedValue(Buffer.from('')),
             dispose: vi.fn().mockResolvedValue(undefined),
         };
     }

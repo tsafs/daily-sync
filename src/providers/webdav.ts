@@ -119,6 +119,16 @@ export class WebDavProvider implements BackupProvider {
         }
     }
 
+    async download(remotePath: string): Promise<Buffer> {
+        const client = this.getClient();
+        const fullPath = this.resolvePath(remotePath);
+        this.log.debug({ remotePath }, 'Downloading file for integrity check');
+        const content = await client.getFileContents(fullPath, { format: 'binary' });
+        const buffer = Buffer.from(content as ArrayBuffer);
+        this.log.debug({ remotePath, bytes: buffer.byteLength }, 'Download complete');
+        return buffer;
+    }
+
     async dispose(): Promise<void> {
         this.log.debug('Disposing WebDAV provider');
         // The webdav client is stateless (HTTP) — no connection to close

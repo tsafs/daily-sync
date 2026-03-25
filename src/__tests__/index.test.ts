@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { BackupProvider } from '../providers/provider.js';
 import type { ArchiverService, ArchiveResult } from '../services/archiver.js';
 import type { RetentionService, RetentionResult } from '../services/retention.js';
+import type { IntegrityService, IntegrityResult } from '../services/integrity.js';
 import type { AppConfig } from '../config.js';
 import { createSilentLogger } from '../services/logger.js';
 import {
@@ -23,6 +24,7 @@ function createMockProvider(overrides: Partial<BackupProvider> = {}): BackupProv
         list: vi.fn<() => Promise<[]>>().mockResolvedValue([]),
         delete: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         mkdir: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
+        download: vi.fn<() => Promise<Buffer>>().mockResolvedValue(Buffer.from('')),
         dispose: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         ...overrides,
     };
@@ -50,6 +52,20 @@ function createMockRetention(result?: Partial<RetentionResult>): RetentionServic
     return {
         apply: vi.fn<() => Promise<RetentionResult>>().mockResolvedValue(retentionResult),
     } as unknown as RetentionService;
+}
+
+function createMockIntegrity(result?: Partial<IntegrityResult>): IntegrityService {
+    const integrityResult: IntegrityResult = {
+        localFile: '/tmp/test/data_20260324_020000.zip',
+        remoteFile: '/target/backup_20260324_020000/data_20260324_020000.zip',
+        localChecksum: 'abc123def456',
+        remoteChecksum: 'abc123def456',
+        verified: true,
+        ...result,
+    };
+    return {
+        verify: vi.fn<() => Promise<IntegrityResult>>().mockResolvedValue(integrityResult),
+    } as unknown as IntegrityService;
 }
 
 /** Get all paths passed to provider.delete calls. */
@@ -230,19 +246,21 @@ describe('runBackup', () => {
     let provider: BackupProvider;
     let archiver: ArchiverService;
     let retention: RetentionService;
+    let integrity: IntegrityService;
     let config: AppConfig;
 
     beforeEach(() => {
         provider = createMockProvider();
         archiver = createMockArchiver();
         retention = createMockRetention();
+        integrity = createMockIntegrity();
         config = createTestConfig();
     });
 
     // -- Success path -------------------------------------------------------
 
     it('runs the full backup flow on success', async () => {
-        await runBackup(provider, archiver, retention, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log);
 
         // Archive was created with the correct options
         expect(archiver.createArchive).toHaveBeenCalledWith(config.archive);
@@ -278,7 +296,7 @@ describe('runBackup', () => {
             baseName: 'data',
         });
 
-        await runBackup(provider, archiver, retention, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log);
 
         expect(provider.upload).toHaveBeenCalledTimes(3);
 
@@ -303,7 +321,7 @@ describe('runBackup', () => {
             provider: { name: 'disk', targetDir: '/target/' }, // trailing slash
         });
 
-        await runBackup(provider, archiver, retention, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log);
 
         const mkdirArg = (provider.mkdir as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
         // Should not double-slash
@@ -317,7 +335,7 @@ describe('runBackup', () => {
         const archiveError = new Error('7z not found');
         (archiver.createArchive as ReturnType<typeof vi.fn>).mockRejectedValue(archiveError);
 
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('7z not found');
 
         // No remote directory was created
@@ -334,7 +352,7 @@ describe('runBackup', () => {
             new Error('source missing'),
         );
 
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('source missing');
 
         // cleanup is NOT called because archiveResult is null
@@ -348,7 +366,7 @@ describe('runBackup', () => {
             new Error('network timeout'),
         );
 
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('network timeout');
 
         // Remote dir was created then cleaned up
@@ -373,7 +391,7 @@ describe('runBackup', () => {
         );
 
         // The original upload error should still be thrown
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('upload failed');
 
         // Delete was attempted on the backup subdir, not the parent
@@ -391,7 +409,7 @@ describe('runBackup', () => {
             new Error('permission denied'),
         );
 
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('permission denied');
 
         // mkdir failed, so remoteCreated is false — no delete attempt
@@ -419,7 +437,7 @@ describe('runBackup', () => {
             }
         });
 
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('volume 2 failed');
 
         // Only 2 upload calls (failed on second)
@@ -441,7 +459,7 @@ describe('runBackup', () => {
         );
 
         // Should NOT throw — retention failure is non-fatal
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .resolves.toBeUndefined();
 
         // Archive was created and uploaded
@@ -461,16 +479,56 @@ describe('runBackup', () => {
     // -- Temp cleanup always runs -------------------------------------------
 
     it('cleans up temp files on success', async () => {
-        await runBackup(provider, archiver, retention, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log);
         expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
     });
 
     it('cleans up temp files on upload failure', async () => {
         (provider.upload as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-        await expect(runBackup(provider, archiver, retention, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
             .rejects.toThrow('fail');
 
+        expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
+    });
+
+    // -- Integrity verification -----------------------------------------------
+
+    it('calls integrity.verify for each uploaded archive volume', async () => {
+        archiver = createMockArchiver({
+            files: ['/tmp/test/data.zip.001', '/tmp/test/data.zip.002'],
+            baseName: 'data',
+        });
+
+        await runBackup(provider, archiver, retention, integrity, config, log);
+
+        expect(integrity.verify).toHaveBeenCalledTimes(2);
+
+        const verifyCalls = (integrity.verify as ReturnType<typeof vi.fn>).mock.calls;
+        // First call: local path and remote path for volume 001
+        expect(verifyCalls[0][1]).toBe('/tmp/test/data.zip.001');
+        expect((verifyCalls[0][2] as string).endsWith('/data.zip.001')).toBe(true);
+        // Second call: local path and remote path for volume 002
+        expect(verifyCalls[1][1]).toBe('/tmp/test/data.zip.002');
+        expect((verifyCalls[1][2] as string).endsWith('/data.zip.002')).toBe(true);
+        // Both calls receive the same provider
+        expect(verifyCalls[0][0]).toBe(provider);
+        expect(verifyCalls[1][0]).toBe(provider);
+    });
+
+    it('cleans up remote backup directory when integrity check throws', async () => {
+        const integrityError = new Error('checksum mismatch');
+        (integrity.verify as ReturnType<typeof vi.fn>).mockRejectedValue(integrityError);
+
+        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+            .rejects.toThrow('checksum mismatch');
+
+        // Remote directory was created then cleaned up
+        expect(provider.mkdir).toHaveBeenCalledOnce();
+        expect(provider.delete).toHaveBeenCalledOnce();
+        assertDeletesOnlyBackupDirs(provider, '/target');
+
+        // Temp files are still cleaned up
         expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
     });
 });

@@ -108,6 +108,19 @@ export interface BackupProvider {
     mkdir(remotePath: string): Promise<void>;
 
     /**
+     * Download a remote file and return its content as a Buffer.
+     *
+     * Required by all providers to support post-upload integrity
+     * verification. After each archive volume is uploaded, the
+     * {@link IntegrityService} downloads it and compares its SHA-256
+     * checksum against the local file.
+     *
+     * @param remotePath - Full remote path to the file
+     * @returns File content as a Buffer
+     */
+    download(remotePath: string): Promise<Buffer>;
+
+    /**
      * Clean up resources (close connections, release handles).
      * Safe to call multiple times.
      */

@@ -15,6 +15,7 @@ import { createLogger, type Logger } from './services/logger.js';
 import { ArchiverService, type ArchiveResult } from './services/archiver.js';
 import { RetentionService } from './services/retention.js';
 import { SchedulerService } from './services/scheduler.js';
+import { IntegrityService } from './services/integrity.js';
 import { DiskProvider } from './providers/disk.js';
 import { WebDavProvider } from './providers/webdav.js';
 import { FtpProvider } from './providers/ftp.js';
@@ -63,8 +64,9 @@ export function getTargetDir(config: AnyProviderConfig): string {
  * 1. Create archive from source data
  * 2. Create remote backup directory (`backup_YYYYMMDD_HHMMSS/`)
  * 3. Upload all archive volumes
- * 4. Run GFS retention cleanup
- * 5. Clean up local temp files (always, via finally)
+ * 4. Verify upload integrity (SHA-256 round-trip where provider supports it)
+ * 5. Run GFS retention cleanup
+ * 6. Clean up local temp files (always, via finally)
  *
  * On failure the incomplete remote directory is removed (best-effort)
  * and the error is re-thrown so callers can log / notify.
@@ -77,6 +79,7 @@ export async function runBackup(
     provider: BackupProvider,
     archiver: ArchiverService,
     retention: RetentionService,
+    integrity: IntegrityService,
     config: AppConfig,
     log: Logger,
 ): Promise<void> {
@@ -119,7 +122,16 @@ export async function runBackup(
         }
         backupLog.info('All archive volumes uploaded');
 
-        // Step 4 — GFS retention cleanup (non-fatal: backup is already complete)
+        // Step 4 — Verify upload integrity (non-blocking for unsupported providers)
+        backupLog.info('Verifying upload integrity');
+        for (const file of archiveResult.files) {
+            const fileName = basename(file);
+            const remoteFilePath = `${remotePath}/${fileName}`;
+            await integrity.verify(provider, file, remoteFilePath);
+        }
+        backupLog.info('Integrity verification complete');
+
+        // Step 5 — GFS retention cleanup (non-fatal: backup is already complete)
         backupLog.info('Running retention cleanup');
         try {
             const retentionResult = await retention.apply(provider, targetDir);
@@ -151,7 +163,7 @@ export async function runBackup(
         }
         throw err;
     } finally {
-        // Step 5 — Always clean up local temp files
+        // Step 6 — Always clean up local temp files
         if (archiveResult) {
             backupLog.debug('Cleaning up local temp files');
             await archiver.cleanup(archiveResult.tempDir);
@@ -205,6 +217,7 @@ export async function main(): Promise<void> {
     const archiver = new ArchiverService(log);
     const retention = new RetentionService(config.retention, log);
     const scheduler = new SchedulerService(log);
+    const integrity = new IntegrityService(log);
 
     // ── Backup lifecycle tracking ─────────────────────────────────────
     let backupInProgress = false;
@@ -219,7 +232,7 @@ export async function main(): Promise<void> {
         }
         backupInProgress = true;
         try {
-            await runBackup(provider, archiver, retention, config, log);
+            await runBackup(provider, archiver, retention, integrity, config, log);
             lastBackupFailed = false;
         } catch (err) {
             lastBackupFailed = true;

@@ -15,6 +15,7 @@ vi.mock('basic-ftp', () => {
         list: vi.fn().mockResolvedValue([]),
         removeDir: vi.fn().mockResolvedValue(undefined),
         remove: vi.fn().mockResolvedValue(undefined),
+        downloadTo: vi.fn().mockResolvedValue({ code: 226, message: 'Transfer complete' }),
         close: vi.fn(),
     };
     return {
@@ -49,6 +50,7 @@ describe('FtpProvider', () => {
         mockClient.list.mockResolvedValue([]);
         mockClient.removeDir.mockResolvedValue(undefined);
         mockClient.remove.mockResolvedValue(undefined);
+        mockClient.downloadTo.mockResolvedValue({ code: 226, message: 'Transfer complete' });
         mockClient.close.mockReturnValue(undefined);
 
         provider = new FtpProvider(config);
@@ -202,6 +204,60 @@ describe('FtpProvider', () => {
             await provider.mkdir('a/b/c');
 
             expect(mockClient.cd).toHaveBeenCalledWith('/');
+        });
+    });
+
+    describe('download()', () => {
+        it('should call downloadTo with the resolved remote path', async () => {
+            await provider.download('backup/archive.zip');
+
+            expect(mockClient.downloadTo).toHaveBeenCalledWith(
+                expect.any(Object),
+                '/backups/backup/archive.zip',
+            );
+        });
+
+        it('should return content written by downloadTo as a Buffer', async () => {
+            mockClient.downloadTo.mockImplementation(async (writable: any) => {
+                writable.write(Buffer.from('downloaded-content'));
+                writable.end();
+                return { code: 226, message: 'Transfer complete' };
+            });
+
+            const buffer = await provider.download('archive.zip');
+
+            expect(Buffer.isBuffer(buffer)).toBe(true);
+            expect(buffer.toString('utf-8')).toBe('downloaded-content');
+        });
+
+        it('should correctly concatenate multiple chunks', async () => {
+            mockClient.downloadTo.mockImplementation(async (writable: any) => {
+                writable.write(Buffer.from('chunk1-'));
+                writable.write(Buffer.from('chunk2'));
+                writable.end();
+                return { code: 226, message: 'Transfer complete' };
+            });
+
+            const buffer = await provider.download('multi.zip');
+
+            expect(buffer.toString('utf-8')).toBe('chunk1-chunk2');
+        });
+
+        it('should return an empty Buffer when no data is written', async () => {
+            mockClient.downloadTo.mockImplementation(async (writable: any) => {
+                writable.end();
+                return { code: 226, message: 'Transfer complete' };
+            });
+
+            const buffer = await provider.download('empty.zip');
+
+            expect(buffer.byteLength).toBe(0);
+        });
+
+        it('should propagate errors from downloadTo', async () => {
+            mockClient.downloadTo.mockRejectedValue(new Error('connection reset'));
+
+            await expect(provider.download('error.zip')).rejects.toThrow('connection reset');
         });
     });
 
