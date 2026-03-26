@@ -12,7 +12,7 @@ jobs:
     steps:
       # Checkout the repo
       - name: Checkout code
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
 
       # Read the version from version.txt
       - name: Read version
@@ -39,7 +39,7 @@ jobs:
             -t ghcr.io/tsafs/daily-sync:$VERSION \
             -t ghcr.io/tsafs/daily-sync:latest .
 
-      # Push both Docker image tags to Docker Hub
+      # Push both Docker image tags to GitHub Container Registry
       - name: Push Docker image
         run: |
           docker push ghcr.io/tsafs/daily-sync:$VERSION
