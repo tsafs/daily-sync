@@ -544,7 +544,7 @@ describe('runBackup', () => {
 
         // Should NOT throw — retention failure is non-fatal
         await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
-            .resolves.toBeUndefined();
+            .resolves.toBeDefined();
 
         // Archive was created and uploaded
         expect(archiver.createArchive).toHaveBeenCalledOnce();
@@ -558,6 +558,41 @@ describe('runBackup', () => {
 
         // Temp files were cleaned up
         expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
+    });
+
+    // -- Return value / stats ----------------------------------------------
+
+    it('returns BackupRunStats with correct backupId format', async () => {
+        const stats = await runBackup(
+            provider, archiver, retention, integrity, config, log, async fn => fn(),
+        );
+        expect(stats.backupId).toMatch(/^backup_\d{8}_\d{6}$/);
+    });
+
+    it('returns BackupRunStats with correct volumeCount', async () => {
+        archiver = createMockArchiver({
+            files: ['/tmp/test/data.zip.001', '/tmp/test/data.zip.002'],
+        });
+        const stats = await runBackup(
+            provider, archiver, retention, integrity, config, log, async fn => fn(),
+        );
+        expect(stats.volumeCount).toBe(2);
+    });
+
+    it('returns BackupRunStats with a non-negative durationMs', async () => {
+        const stats = await runBackup(
+            provider, archiver, retention, integrity, config, log, async fn => fn(),
+        );
+        expect(stats.durationMs).toBeGreaterThanOrEqual(0);
+    });
+
+    it('returns BackupRunStats with specified backupDirNameOverride', async () => {
+        const override = 'backup_20260101_000000';
+        const stats = await runBackup(
+            provider, archiver, retention, integrity, config, log,
+            async fn => fn(), override,
+        );
+        expect(stats.backupId).toBe(override);
     });
 
     // -- Temp cleanup always runs -------------------------------------------

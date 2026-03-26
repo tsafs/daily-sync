@@ -7,6 +7,7 @@
  * @module
  */
 
+import { stat } from 'node:fs/promises';
 import { basename } from 'node:path';
 import { argv } from 'node:process';
 import { fileURLToPath } from 'node:url';
@@ -17,10 +18,30 @@ import { RetentionService } from './services/retention.js';
 import { SchedulerService } from './services/scheduler.js';
 import { IntegrityService } from './services/integrity.js';
 import { withRetry } from './services/retry.js';
+import { createNotifier, type BackupEvent } from './services/notifier.js';
 import { DiskProvider } from './providers/disk.js';
 import { WebDavProvider } from './providers/webdav.js';
 import { FtpProvider } from './providers/ftp.js';
 import type { BackupProvider, AnyProviderConfig } from './providers/provider.js';
+
+// ---------------------------------------------------------------------------
+// Public types
+// ---------------------------------------------------------------------------
+
+/**
+ * Stats returned by a successful backup run.
+ * Used by the orchestrator to build a {@link BackupEvent} for notifications.
+ */
+export interface BackupRunStats {
+    /** The backup directory name used for this run, e.g. backup_20260326_020000 */
+    backupId: string;
+    /** Total size of all archive volumes in megabytes (rounded to 2 dp) */
+    archiveSizeMb: number;
+    /** Number of archive volumes uploaded */
+    volumeCount: number;
+    /** Wall-clock duration of the backup run in milliseconds */
+    durationMs: number;
+}
 
 // ---------------------------------------------------------------------------
 // Exported helpers (testable)
@@ -88,8 +109,11 @@ export async function runBackup(
     config: AppConfig,
     log: Logger,
     retry: <T>(fn: () => Promise<T>) => Promise<T> = withRetry,
-): Promise<void> {
-    const backupDirName = generateBackupDirName();
+    /** Pre-generated backup directory name; generated fresh if omitted. */
+    backupDirNameOverride?: string,
+): Promise<BackupRunStats> {
+    const startTime = Date.now();
+    const backupDirName = backupDirNameOverride ?? generateBackupDirName();
     const targetDir = getTargetDir(config.provider);
     const remotePath = targetDir.endsWith('/')
         ? `${targetDir}${backupDirName}`
@@ -152,7 +176,22 @@ export async function runBackup(
             );
         }
 
+        // Compute archive stats for the success notification / return value
+        let totalBytes = 0;
+        for (const file of archiveResult.files) {
+            try {
+                const s = await stat(file);
+                totalBytes += s.size;
+            } catch {
+                // File may have already been cleaned up in an edge case; skip
+            }
+        }
+        const archiveSizeMb = Math.round((totalBytes / (1024 * 1024)) * 100) / 100;
+        const durationMs = Date.now() - startTime;
+
         backupLog.info('Backup run completed successfully');
+
+        return { backupId: backupDirName, archiveSizeMb, volumeCount: archiveResult.files.length, durationMs };
     } catch (err) {
         // Best-effort: remove incomplete remote backup directory
         if (remoteCreated) {
@@ -224,6 +263,7 @@ export async function main(): Promise<void> {
     const retention = new RetentionService(config.retention, log);
     const scheduler = new SchedulerService(log);
     const integrity = new IntegrityService(log);
+    const notifier = createNotifier(config.notification, log);
 
     // ── Backup lifecycle tracking ─────────────────────────────────────
     let backupInProgress = false;
@@ -237,14 +277,35 @@ export async function main(): Promise<void> {
             return;
         }
         backupInProgress = true;
+        const backupId = generateBackupDirName();
         try {
-            await runBackup(provider, archiver, retention, integrity, config, log);
+            const stats = await runBackup(
+                provider, archiver, retention, integrity, config, log,
+                withRetry, backupId,
+            );
             lastBackupFailed = false;
+            // Success notification (opt-in — off by default)
+            const successEvent: BackupEvent = {
+                type: 'success',
+                providerName: provider.name,
+                backupId,
+                archiveSizeMb: stats.archiveSizeMb,
+                volumeCount: stats.volumeCount,
+                durationMs: stats.durationMs,
+            };
+            await notifier.notify(successEvent);
         } catch (err) {
             lastBackupFailed = true;
             const message = err instanceof Error ? err.message : String(err);
             log.error({ err }, `Backup failed: ${message}`);
-            // TODO: Send failure notification (step 14 — notifier service)
+            // Failure notification (on by default when SMTP is configured)
+            const failureEvent: BackupEvent = {
+                type: 'failure',
+                providerName: provider.name,
+                backupId,
+                error: err instanceof Error ? err : new Error(String(err)),
+            };
+            await notifier.notify(failureEvent);
         } finally {
             backupInProgress = false;
             if (backupFinishedResolve) {
