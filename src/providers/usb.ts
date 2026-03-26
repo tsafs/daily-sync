@@ -109,7 +109,7 @@ export class UsbProvider implements BackupProvider {
     constructor(
         private readonly config: UsbProviderConfig,
         private readonly logger?: Logger,
-    ) {}
+    ) { }
 
     /**
      * Detect the USB device and mount it to a temp directory.
@@ -132,7 +132,7 @@ export class UsbProvider implements BackupProvider {
     async initialize(): Promise<void> {
         throw new Error(
             'UsbProvider.initialize() is not implemented. ' +
-                'See the module-level JSDoc in src/providers/usb.ts for the implementation guide.',
+            'See the module-level JSDoc in src/providers/usb.ts for the implementation guide.',
         );
     }
 
@@ -145,7 +145,7 @@ export class UsbProvider implements BackupProvider {
     async upload(_localPath: string, _remotePath: string): Promise<void> {
         throw new Error(
             'UsbProvider.upload() is not implemented. ' +
-                'Delegate to the internal DiskProvider after initialize() mounts the device.',
+            'Delegate to the internal DiskProvider after initialize() mounts the device.',
         );
     }
 
@@ -157,7 +157,7 @@ export class UsbProvider implements BackupProvider {
     async list(_remotePath: string): Promise<RemoteEntry[]> {
         throw new Error(
             'UsbProvider.list() is not implemented. ' +
-                'Delegate to the internal DiskProvider after initialize() mounts the device.',
+            'Delegate to the internal DiskProvider after initialize() mounts the device.',
         );
     }
 
@@ -169,7 +169,7 @@ export class UsbProvider implements BackupProvider {
     async delete(_remotePath: string): Promise<void> {
         throw new Error(
             'UsbProvider.delete() is not implemented. ' +
-                'Delegate to the internal DiskProvider after initialize() mounts the device.',
+            'Delegate to the internal DiskProvider after initialize() mounts the device.',
         );
     }
 
@@ -181,7 +181,7 @@ export class UsbProvider implements BackupProvider {
     async mkdir(_remotePath: string): Promise<void> {
         throw new Error(
             'UsbProvider.mkdir() is not implemented. ' +
-                'Delegate to the internal DiskProvider after initialize() mounts the device.',
+            'Delegate to the internal DiskProvider after initialize() mounts the device.',
         );
     }
 
@@ -194,7 +194,7 @@ export class UsbProvider implements BackupProvider {
     async download(_remotePath: string): Promise<Buffer> {
         throw new Error(
             'UsbProvider.download() is not implemented. ' +
-                'Delegate to the internal DiskProvider after initialize() mounts the device.',
+            'Delegate to the internal DiskProvider after initialize() mounts the device.',
         );
     }
 
@@ -216,7 +216,7 @@ export class UsbProvider implements BackupProvider {
     async dispose(): Promise<void> {
         throw new Error(
             'UsbProvider.dispose() is not implemented. ' +
-                'Unmount the device and clean up the temp mount directory.',
+            'Unmount the device and clean up the temp mount directory.',
         );
     }
 }
