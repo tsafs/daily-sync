@@ -16,6 +16,7 @@ import { ArchiverService, type ArchiveResult } from './services/archiver.js';
 import { RetentionService } from './services/retention.js';
 import { SchedulerService } from './services/scheduler.js';
 import { IntegrityService } from './services/integrity.js';
+import { withRetry } from './services/retry.js';
 import { DiskProvider } from './providers/disk.js';
 import { WebDavProvider } from './providers/webdav.js';
 import { FtpProvider } from './providers/ftp.js';
@@ -74,6 +75,10 @@ export function getTargetDir(config: AnyProviderConfig): string {
  * Retention errors are non-fatal: the backup itself succeeded if all
  * volumes were uploaded, so the remote directory is kept even if
  * retention cleanup fails.
+ *
+ * @param retry - Injectable retry wrapper for uploads. Defaults to
+ *   {@link withRetry} with exponential backoff (3 attempts, 5 s/15 s/45 s).
+ *   Pass `async fn => fn()` in unit tests to skip delays.
  */
 export async function runBackup(
     provider: BackupProvider,
@@ -82,6 +87,7 @@ export async function runBackup(
     integrity: IntegrityService,
     config: AppConfig,
     log: Logger,
+    retry: <T>(fn: () => Promise<T>) => Promise<T> = withRetry,
 ): Promise<void> {
     const backupDirName = generateBackupDirName();
     const targetDir = getTargetDir(config.provider);
@@ -118,7 +124,7 @@ export async function runBackup(
                 { file: fileName, part: i + 1, total: archiveResult.files.length },
                 'Uploading archive volume',
             );
-            await provider.upload(file, remoteFilePath);
+            await retry(() => provider.upload(file, remoteFilePath));
         }
         backupLog.info('All archive volumes uploaded');
 

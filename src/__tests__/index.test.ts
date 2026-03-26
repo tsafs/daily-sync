@@ -5,12 +5,16 @@ import type { RetentionService, RetentionResult } from '../services/retention.js
 import type { IntegrityService, IntegrityResult } from '../services/integrity.js';
 import type { AppConfig } from '../config.js';
 import { createSilentLogger } from '../services/logger.js';
+import { withRetry } from '../services/retry.js';
 import {
     createProvider,
     generateBackupDirName,
     getTargetDir,
     runBackup,
 } from '../index.js';
+
+/** withRetry with zero delays — exercises real retry logic without real waits. */
+const noDelayRetry = <T>(fn: () => Promise<T>) => withRetry(fn, { delays: [0, 0] });
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -260,7 +264,7 @@ describe('runBackup', () => {
     // -- Success path -------------------------------------------------------
 
     it('runs the full backup flow on success', async () => {
-        await runBackup(provider, archiver, retention, integrity, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log, async fn => fn());
 
         // Archive was created with the correct options
         expect(archiver.createArchive).toHaveBeenCalledWith(config.archive);
@@ -296,7 +300,7 @@ describe('runBackup', () => {
             baseName: 'data',
         });
 
-        await runBackup(provider, archiver, retention, integrity, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log, async fn => fn());
 
         expect(provider.upload).toHaveBeenCalledTimes(3);
 
@@ -321,7 +325,7 @@ describe('runBackup', () => {
             provider: { name: 'disk', targetDir: '/target/' }, // trailing slash
         });
 
-        await runBackup(provider, archiver, retention, integrity, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log, async fn => fn());
 
         const mkdirArg = (provider.mkdir as ReturnType<typeof vi.fn>).mock.calls[0][0] as string;
         // Should not double-slash
@@ -335,7 +339,7 @@ describe('runBackup', () => {
         const archiveError = new Error('7z not found');
         (archiver.createArchive as ReturnType<typeof vi.fn>).mockRejectedValue(archiveError);
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('7z not found');
 
         // No remote directory was created
@@ -352,7 +356,7 @@ describe('runBackup', () => {
             new Error('source missing'),
         );
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('source missing');
 
         // cleanup is NOT called because archiveResult is null
@@ -366,7 +370,7 @@ describe('runBackup', () => {
             new Error('network timeout'),
         );
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('network timeout');
 
         // Remote dir was created then cleaned up
@@ -391,7 +395,7 @@ describe('runBackup', () => {
         );
 
         // The original upload error should still be thrown
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('upload failed');
 
         // Delete was attempted on the backup subdir, not the parent
@@ -409,7 +413,7 @@ describe('runBackup', () => {
             new Error('permission denied'),
         );
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('permission denied');
 
         // mkdir failed, so remoteCreated is false — no delete attempt
@@ -437,7 +441,7 @@ describe('runBackup', () => {
             }
         });
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('volume 2 failed');
 
         // Only 2 upload calls (failed on second)
@@ -451,6 +455,86 @@ describe('runBackup', () => {
         assertSourceDirNeverDeleted(provider, archiver, config.archive.sourceDir);
     });
 
+    // -- Retry behavior ----------------------------------------------------
+
+    it('retries a transient upload failure and completes successfully', async () => {
+        // First call to upload throws; second succeeds.
+        let uploadCalls = 0;
+        (provider.upload as ReturnType<typeof vi.fn>).mockImplementation(async () => {
+            uploadCalls++;
+            if (uploadCalls === 1) throw new Error('transient network error');
+        });
+
+        // noDelayRetry uses real withRetry logic (3 attempts, 0 ms waits)
+        await runBackup(provider, archiver, retention, integrity, config, log, noDelayRetry);
+
+        // upload was called twice: once failing, once succeeding
+        expect(provider.upload).toHaveBeenCalledTimes(2);
+
+        // Backup completed — no remote cleanup
+        expect(provider.delete).not.toHaveBeenCalled();
+
+        // Integrity and retention still ran
+        expect(integrity.verify).toHaveBeenCalledOnce();
+        expect(retention.apply).toHaveBeenCalledOnce();
+
+        // Temp files cleaned up
+        expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
+    });
+
+    it('exhausts all retry attempts and propagates the last upload error', async () => {
+        // upload always throws — exhausts all 3 default attempts
+        (provider.upload as ReturnType<typeof vi.fn>).mockRejectedValue(
+            new Error('persistent failure'),
+        );
+
+        await expect(
+            runBackup(provider, archiver, retention, integrity, config, log, noDelayRetry),
+        ).rejects.toThrow('persistent failure');
+
+        // withRetry default is 3 attempts
+        expect(provider.upload).toHaveBeenCalledTimes(3);
+
+        // Remote directory was cleaned up after exhausted retries
+        expect(provider.delete).toHaveBeenCalledOnce();
+        assertDeletesOnlyBackupDirs(provider, '/target');
+
+        // Integrity was never reached
+        expect(integrity.verify).not.toHaveBeenCalled();
+
+        // Temp files still cleaned up
+        expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
+    });
+
+    it('retries each volume independently — success after transient on volume 2', async () => {
+        archiver = createMockArchiver({
+            files: ['/tmp/test/data.zip.001', '/tmp/test/data.zip.002'],
+            baseName: 'data',
+        });
+
+        // Volume 2's first attempt fails; retry succeeds
+        let vol2Attempts = 0;
+        (provider.upload as ReturnType<typeof vi.fn>).mockImplementation(
+            async (_local: string, remote: string) => {
+                if ((remote as string).endsWith('.002')) {
+                    vol2Attempts++;
+                    if (vol2Attempts === 1) throw new Error('vol2 transient');
+                }
+            },
+        );
+
+        await runBackup(provider, archiver, retention, integrity, config, log, noDelayRetry);
+
+        // vol1 (1 call) + vol2 (2 calls: 1 failure + 1 success) = 3 total
+        expect(provider.upload).toHaveBeenCalledTimes(3);
+
+        // Backup succeeded — no cleanup
+        expect(provider.delete).not.toHaveBeenCalled();
+
+        // Both volumes verified
+        expect(integrity.verify).toHaveBeenCalledTimes(2);
+    });
+
     // -- Retention failure --------------------------------------------------
 
     it('succeeds even when retention cleanup fails', async () => {
@@ -459,7 +543,7 @@ describe('runBackup', () => {
         );
 
         // Should NOT throw — retention failure is non-fatal
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .resolves.toBeUndefined();
 
         // Archive was created and uploaded
@@ -479,14 +563,14 @@ describe('runBackup', () => {
     // -- Temp cleanup always runs -------------------------------------------
 
     it('cleans up temp files on success', async () => {
-        await runBackup(provider, archiver, retention, integrity, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log, async fn => fn());
         expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
     });
 
     it('cleans up temp files on upload failure', async () => {
         (provider.upload as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('fail');
 
         expect(archiver.cleanup).toHaveBeenCalledWith('/tmp/test');
@@ -500,7 +584,7 @@ describe('runBackup', () => {
             baseName: 'data',
         });
 
-        await runBackup(provider, archiver, retention, integrity, config, log);
+        await runBackup(provider, archiver, retention, integrity, config, log, async fn => fn());
 
         expect(integrity.verify).toHaveBeenCalledTimes(2);
 
@@ -520,7 +604,7 @@ describe('runBackup', () => {
         const integrityError = new Error('checksum mismatch');
         (integrity.verify as ReturnType<typeof vi.fn>).mockRejectedValue(integrityError);
 
-        await expect(runBackup(provider, archiver, retention, integrity, config, log))
+        await expect(runBackup(provider, archiver, retention, integrity, config, log, async fn => fn()))
             .rejects.toThrow('checksum mismatch');
 
         // Remote directory was created then cleaned up
