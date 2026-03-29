@@ -19,6 +19,8 @@ export interface ArchiveOptions {
     password?: string;
     /** Multi-volume split size in MB (0 = no splitting) */
     chunkSizeMb: number;
+    /** Base directory for temporary files (defaults to os.tmpdir()). */
+    tempBaseDir?: string;
 }
 
 /**
@@ -60,7 +62,8 @@ export class ArchiverService {
         }
 
         // Create a temp working directory
-        const tempDir = await mkdtemp(join(tmpdir(), 'daily-sync-'));
+        const base = options.tempBaseDir ?? tmpdir();
+        const tempDir = await mkdtemp(join(base, 'daily-sync-'));
         this.log.info(
             { sourceDir: options.sourceDir, encrypt: options.encrypt, chunkSizeMb: options.chunkSizeMb },
             'Creating archive',

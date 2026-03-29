@@ -12,6 +12,7 @@
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MockInstance } from 'vitest';
+import { Readable } from 'node:stream';
 import type { AppConfig } from '../config.js';
 import type { BackupProvider } from '../providers/provider.js';
 
@@ -20,6 +21,9 @@ import type { BackupProvider } from '../providers/provider.js';
 // ---------------------------------------------------------------------------
 
 const mocks = vi.hoisted(() => {
+    // Must import inside vi.hoisted — top-level imports are not yet resolved here.
+    const { Readable: HoistedReadable } = require('node:stream') as typeof import('node:stream');
+
     const silentLogger = {
         info: () => { },
         warn: () => { },
@@ -35,7 +39,7 @@ const mocks = vi.hoisted(() => {
         list: vi.fn<() => Promise<[]>>().mockResolvedValue([]),
         delete: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         mkdir: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-        download: vi.fn<() => Promise<Buffer>>().mockResolvedValue(Buffer.from('')),
+        download: vi.fn<() => Promise<Readable>>().mockResolvedValue(HoistedReadable.from(Buffer.from(''))),
         dispose: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
     };
 

@@ -1,5 +1,5 @@
 import { posix } from 'node:path';
-import { Writable } from 'node:stream';
+import { PassThrough } from 'node:stream';
 import { Client as FtpClient } from 'basic-ftp';
 import type { BackupProvider, FtpProviderConfig, RemoteEntry } from './provider.js';
 import { type Logger, createSilentLogger } from '../services/logger.js';
@@ -43,15 +43,15 @@ export class FtpProvider implements BackupProvider {
         this.log.debug('FTP connection established');
 
         // Ensure target directory exists
+        // Note: ensureDir internally calls cd('/') for absolute paths (basic-ftp source, Client.js:650)
+        // All subsequent operations use absolute paths via resolvePath(), so CWD state is irrelevant.
         await this.client.ensureDir(this.targetDir);
-        // ensureDir changes the working directory — go back to root
-        await this.client.cd('/');
 
         this.log.info('FTP provider initialized');
     }
 
     async upload(localPath: string, remotePath: string): Promise<void> {
-        const client = this.getClient();
+        const client = await this.getConnectedClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.info({ remotePath }, 'Uploading file');
 
@@ -60,7 +60,7 @@ export class FtpProvider implements BackupProvider {
     }
 
     async list(remotePath: string): Promise<RemoteEntry[]> {
-        const client = this.getClient();
+        const client = await this.getConnectedClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.debug({ remotePath }, 'Listing directory');
 
@@ -85,7 +85,7 @@ export class FtpProvider implements BackupProvider {
     }
 
     async delete(remotePath: string): Promise<void> {
-        const client = this.getClient();
+        const client = await this.getConnectedClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.info({ remotePath }, 'Deleting path');
 
@@ -110,32 +110,26 @@ export class FtpProvider implements BackupProvider {
     }
 
     async mkdir(remotePath: string): Promise<void> {
-        const client = this.getClient();
+        const client = await this.getConnectedClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.debug({ remotePath }, 'Creating directory');
 
+        // Note: ensureDir internally calls cd('/') for absolute paths (basic-ftp source, Client.js:650)
+        // All subsequent operations use absolute paths via resolvePath(), so CWD state is irrelevant.
         await client.ensureDir(fullPath);
-        // ensureDir changes the working directory — go back to root
-        await client.cd('/');
     }
 
-    async download(remotePath: string): Promise<Buffer> {
-        const client = this.getClient();
+    async download(remotePath: string): Promise<PassThrough> {
+        const client = await this.getConnectedClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.debug({ remotePath }, 'Downloading file for integrity check');
 
-        const chunks: Buffer[] = [];
-        const writable = new Writable({
-            write(chunk, _encoding, callback) {
-                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk as string));
-                callback();
-            },
-        });
-
-        await client.downloadTo(writable, fullPath);
-        const buffer = Buffer.concat(chunks);
-        this.log.debug({ remotePath, bytes: buffer.byteLength }, 'Download complete');
-        return buffer;
+        // Use a PassThrough so basic-ftp writes to the Writable side while the
+        // integrity service reads from the Readable side.  Fire-and-forget the
+        // transfer and forward any error to the stream so the reader sees it.
+        const pt = new PassThrough();
+        void client.downloadTo(pt, fullPath).catch((err: unknown) => pt.destroy(err as Error));
+        return pt;
     }
 
     async dispose(): Promise<void> {
@@ -148,11 +142,25 @@ export class FtpProvider implements BackupProvider {
     }
 
     /**
-     * Get the initialized client or throw if not initialized.
+     * Return a connected FTP client, reconnecting transparently if the
+     * server closed the control connection (e.g. due to idle timeout).
+     *
+     * Throws if {@link initialize} was never called.
      */
-    private getClient(): FtpClient {
+    private async getConnectedClient(): Promise<FtpClient> {
         if (!this.client) {
             throw new Error('FtpProvider not initialized. Call initialize() first.');
+        }
+        if (this.client.closed) {
+            this.log.warn('FTP connection was lost (server idle-timeout?) — reconnecting');
+            await this.client.access({
+                host: this.config.host,
+                port: this.config.port,
+                user: this.config.username,
+                password: this.config.password,
+                secure: this.config.tls,
+            });
+            this.log.info('FTP reconnection successful');
         }
         return this.client;
     }

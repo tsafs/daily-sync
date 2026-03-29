@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { Readable } from 'node:stream';
 import type { BackupProvider } from '../providers/provider.js';
 import type { ArchiverService, ArchiveResult } from '../services/archiver.js';
 import type { RetentionService, RetentionResult } from '../services/retention.js';
@@ -28,7 +29,7 @@ function createMockProvider(overrides: Partial<BackupProvider> = {}): BackupProv
         list: vi.fn<() => Promise<[]>>().mockResolvedValue([]),
         delete: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         mkdir: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
-        download: vi.fn<() => Promise<Buffer>>().mockResolvedValue(Buffer.from('')),
+        download: vi.fn<() => Promise<Readable>>().mockResolvedValue(Readable.from(Buffer.from(''))),
         dispose: vi.fn<() => Promise<void>>().mockResolvedValue(undefined),
         ...overrides,
     };

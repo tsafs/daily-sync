@@ -2,3 +2,4 @@ node_modules
 dist
 
 test_target
+.e2e-tmp

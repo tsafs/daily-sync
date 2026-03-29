@@ -29,6 +29,8 @@ export interface ArchiveConfig {
     password?: string;
     /** Multi-volume chunk size in MB (0 = no splitting) */
     chunkSizeMb: number;
+    /** Base directory for temporary archive files (defaults to os.tmpdir()). */
+    tempBaseDir?: string;
 }
 
 /**

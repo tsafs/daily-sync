@@ -1,0 +1,9 @@
+node_modules
+dist
+test_data
+test_target
+test_scripts
+.git
+*.md
+.venv
+.e2e-tmp

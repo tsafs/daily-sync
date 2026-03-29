@@ -3,6 +3,7 @@ import { rm, mkdtemp, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
+import { Readable } from 'node:stream';
 import { IntegrityService, IntegrityError } from '../services/integrity.js';
 import type { BackupProvider, RemoteEntry } from '../providers/provider.js';
 
@@ -18,8 +19,8 @@ function sha256(content: string | Buffer): string {
 }
 
 /**
- * Mock provider with a download() implementation that returns the given
- * buffer regardless of the requested path.
+ * Mock provider with a download() implementation that returns a Readable stream
+ * of the given buffer regardless of the requested path.
  */
 function createDownloadableProvider(returnBuffer: Buffer): BackupProvider {
     return {
@@ -30,7 +31,7 @@ function createDownloadableProvider(returnBuffer: Buffer): BackupProvider {
         delete: async () => { },
         mkdir: async () => { },
         dispose: async () => { },
-        download: async (_remotePath: string) => returnBuffer,
+        download: async (_remotePath: string) => Readable.from(returnBuffer),
     };
 }
 

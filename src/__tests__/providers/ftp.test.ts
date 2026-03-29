@@ -8,6 +8,7 @@ import type { FtpProviderConfig } from '../../providers/provider.js';
 // Mock basic-ftp module
 vi.mock('basic-ftp', () => {
     const mockClient = {
+        closed: false,
         access: vi.fn().mockResolvedValue(undefined),
         ensureDir: vi.fn().mockResolvedValue(undefined),
         cd: vi.fn().mockResolvedValue(undefined),
@@ -77,10 +78,6 @@ describe('FtpProvider', () => {
 
         it('should ensure target directory exists', () => {
             expect(mockClient.ensureDir).toHaveBeenCalledWith('/backups');
-        });
-
-        it('should return to root directory after ensureDir', () => {
-            expect(mockClient.cd).toHaveBeenCalledWith('/');
         });
     });
 
@@ -198,16 +195,17 @@ describe('FtpProvider', () => {
 
             expect(mockClient.ensureDir).toHaveBeenCalledWith('/backups/backup_20260323_020000');
         });
-
-        it('should return to root after creating directory', async () => {
-            vi.clearAllMocks();
-            await provider.mkdir('a/b/c');
-
-            expect(mockClient.cd).toHaveBeenCalledWith('/');
-        });
     });
 
     describe('download()', () => {
+        /** Collect all chunks from the download() Readable into a Buffer. */
+        async function collect(remotePath: string): Promise<Buffer> {
+            const stream = await provider.download(remotePath);
+            const chunks: Buffer[] = [];
+            for await (const chunk of stream) chunks.push(chunk as Buffer);
+            return Buffer.concat(chunks);
+        }
+
         it('should call downloadTo with the resolved remote path', async () => {
             await provider.download('backup/archive.zip');
 
@@ -217,16 +215,15 @@ describe('FtpProvider', () => {
             );
         });
 
-        it('should return content written by downloadTo as a Buffer', async () => {
+        it('should stream content written by downloadTo', async () => {
             mockClient.downloadTo.mockImplementation(async (writable: any) => {
                 writable.write(Buffer.from('downloaded-content'));
                 writable.end();
                 return { code: 226, message: 'Transfer complete' };
             });
 
-            const buffer = await provider.download('archive.zip');
+            const buffer = await collect('archive.zip');
 
-            expect(Buffer.isBuffer(buffer)).toBe(true);
             expect(buffer.toString('utf-8')).toBe('downloaded-content');
         });
 
@@ -238,26 +235,29 @@ describe('FtpProvider', () => {
                 return { code: 226, message: 'Transfer complete' };
             });
 
-            const buffer = await provider.download('multi.zip');
+            const buffer = await collect('multi.zip');
 
             expect(buffer.toString('utf-8')).toBe('chunk1-chunk2');
         });
 
-        it('should return an empty Buffer when no data is written', async () => {
+        it('should return an empty stream when no data is written', async () => {
             mockClient.downloadTo.mockImplementation(async (writable: any) => {
                 writable.end();
                 return { code: 226, message: 'Transfer complete' };
             });
 
-            const buffer = await provider.download('empty.zip');
+            const buffer = await collect('empty.zip');
 
             expect(buffer.byteLength).toBe(0);
         });
 
-        it('should propagate errors from downloadTo', async () => {
+        it('should propagate errors from downloadTo through the stream', async () => {
             mockClient.downloadTo.mockRejectedValue(new Error('connection reset'));
 
-            await expect(provider.download('error.zip')).rejects.toThrow('connection reset');
+            const stream = await provider.download('error.zip');
+            await expect(
+                (async () => { for await (const _ of stream) { /* drain */ } })(),
+            ).rejects.toThrow('connection reset');
         });
     });
 
@@ -277,6 +277,34 @@ describe('FtpProvider', () => {
         it('should be safe to call multiple times', async () => {
             await provider.dispose();
             await expect(provider.dispose()).resolves.toBeUndefined();
+        });
+    });
+
+    describe('auto-reconnection', () => {
+        it('should reconnect transparently when the server closed the connection', async () => {
+            // Simulate server idle-timeout: connection is closed
+            mockClient.closed = true;
+
+            // access() will be called again to reconnect
+            mockClient.access.mockResolvedValue(undefined);
+            mockClient.list.mockResolvedValue([]);
+
+            // Operation should succeed after auto-reconnect
+            const entries = await provider.list('/');
+            expect(entries).toEqual([]);
+
+            // access() was called once during initialize() and once for reconnect
+            expect(mockClient.access).toHaveBeenCalledTimes(2);
+        });
+
+        it('should not reconnect when the connection is still open', async () => {
+            mockClient.closed = false;
+            mockClient.list.mockResolvedValue([]);
+
+            await provider.list('/');
+
+            // access() was only called once during initialize()
+            expect(mockClient.access).toHaveBeenCalledTimes(1);
         });
     });
 });

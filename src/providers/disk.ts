@@ -1,4 +1,5 @@
-import { copyFile, readFile, readdir, mkdir, rm, stat, chown } from 'node:fs/promises';
+import { createReadStream } from 'node:fs';
+import { copyFile, readdir, mkdir, rm, stat, chown } from 'node:fs/promises';
 import { join, dirname } from 'node:path';
 import type { BackupProvider, DiskProviderConfig, RemoteEntry } from './provider.js';
 import { type Logger, createSilentLogger } from '../services/logger.js';
@@ -106,12 +107,13 @@ export class DiskProvider implements BackupProvider {
         await this.matchOwnership(fullPath);
     }
 
-    async download(remotePath: string): Promise<Buffer> {
+    async download(remotePath: string): Promise<import('node:stream').Readable> {
         const fullPath = this.resolvePath(remotePath);
         this.log.debug({ remotePath }, 'Downloading file for integrity check');
-        const content = await readFile(fullPath);
-        this.log.debug({ remotePath, bytes: content.byteLength }, 'Download complete');
-        return content;
+        // Use a read stream so files larger than the Node.js 2 GiB Buffer limit work.
+        const stream = createReadStream(fullPath);
+        stream.once('close', () => this.log.debug({ remotePath }, 'Download complete'));
+        return stream;
     }
 
     async dispose(): Promise<void> {

@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { mkdtemp, writeFile, rm } from 'node:fs/promises';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
+import { Readable } from 'node:stream';
 import { WebDavProvider } from '../../providers/webdav.js';
 import type { WebDavProviderConfig } from '../../providers/provider.js';
 
@@ -12,7 +13,7 @@ vi.mock('webdav', () => {
         getDirectoryContents: vi.fn().mockResolvedValue([]),
         deleteFile: vi.fn().mockResolvedValue(undefined),
         createDirectory: vi.fn().mockResolvedValue(undefined),
-        getFileContents: vi.fn().mockResolvedValue(new ArrayBuffer(0)),
+        createReadStream: vi.fn().mockReturnValue(Readable.from(Buffer.alloc(0))),
     };
     return {
         createClient: vi.fn(() => mockClient),
@@ -44,7 +45,7 @@ describe('WebDavProvider', () => {
         mockClient.getDirectoryContents.mockResolvedValue([]);
         mockClient.deleteFile.mockResolvedValue(undefined);
         mockClient.createDirectory.mockResolvedValue(undefined);
-        mockClient.getFileContents.mockResolvedValue(new ArrayBuffer(0));
+        mockClient.createReadStream.mockReturnValue(Readable.from(Buffer.alloc(0)));
 
         provider = new WebDavProvider(config);
         await provider.initialize();
@@ -187,32 +188,36 @@ describe('WebDavProvider', () => {
     });
 
     describe('download()', () => {
-        it('should call getFileContents with binary format and correct path', async () => {
-            mockClient.getFileContents.mockResolvedValue(new ArrayBuffer(4));
+        /** Helper to collect a Readable returned by download() into a Buffer. */
+        async function collect(remotePath: string): Promise<Buffer> {
+            const stream = await provider.download(remotePath);
+            const chunks: Buffer[] = [];
+            for await (const chunk of stream) chunks.push(chunk as Buffer);
+            return Buffer.concat(chunks);
+        }
 
+        it('should call createReadStream with the resolved remote path', async () => {
             await provider.download('backup/archive.zip');
 
-            expect(mockClient.getFileContents).toHaveBeenCalledWith(
-                '/backups/backup/archive.zip',
-                { format: 'binary' },
-            );
+            expect(mockClient.createReadStream).toHaveBeenCalledWith('/backups/backup/archive.zip');
         });
 
-        it('should return a Buffer converted from the ArrayBuffer', async () => {
-            const bytes = new Uint8Array([0x68, 0x65, 0x6c, 0x6c, 0x6f]); // 'hello'
-            const ab = bytes.buffer as ArrayBuffer;
-            mockClient.getFileContents.mockResolvedValue(ab);
+        it('should stream the file content correctly', async () => {
+            const data = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f]); // 'hello'
+            mockClient.createReadStream.mockReturnValue(Readable.from(data));
 
-            const result = await provider.download('file.zip');
+            const result = await collect('file.zip');
 
-            expect(Buffer.isBuffer(result)).toBe(true);
             expect(result.toString('utf-8')).toBe('hello');
         });
 
-        it('should propagate errors from getFileContents', async () => {
-            mockClient.getFileContents.mockRejectedValue({ status: 404 });
+        it('should propagate errors from createReadStream', async () => {
+            const errStream = new Readable({
+                read() { this.destroy(new Error('not found')); },
+            });
+            mockClient.createReadStream.mockReturnValue(errStream);
 
-            await expect(provider.download('missing.zip')).rejects.toEqual({ status: 404 });
+            await expect(collect('missing.zip')).rejects.toThrow('not found');
         });
     });
 

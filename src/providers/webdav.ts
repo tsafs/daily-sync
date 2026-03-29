@@ -119,14 +119,13 @@ export class WebDavProvider implements BackupProvider {
         }
     }
 
-    async download(remotePath: string): Promise<Buffer> {
+    async download(remotePath: string): Promise<import('node:stream').Readable> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.debug({ remotePath }, 'Downloading file for integrity check');
-        const content = await client.getFileContents(fullPath, { format: 'binary' });
-        const buffer = Buffer.from(content as ArrayBuffer);
-        this.log.debug({ remotePath, bytes: buffer.byteLength }, 'Download complete');
-        return buffer;
+        // createReadStream returns a Node.js PassThrough (a Readable) that streams
+        // the remote file. No in-memory buffer → no 2 GiB limit.
+        return client.createReadStream(fullPath);
     }
 
     async dispose(): Promise<void> {

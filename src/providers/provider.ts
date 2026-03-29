@@ -1,3 +1,5 @@
+import type { Readable } from 'node:stream';
+
 /**
  * Base configuration shared by all providers.
  */
@@ -108,17 +110,18 @@ export interface BackupProvider {
     mkdir(remotePath: string): Promise<void>;
 
     /**
-     * Download a remote file and return its content as a Buffer.
+     * Download a remote file and return its content as a Readable stream.
      *
      * Required by all providers to support post-upload integrity
      * verification. After each archive volume is uploaded, the
-     * {@link IntegrityService} downloads it and compares its SHA-256
-     * checksum against the local file.
+     * {@link IntegrityService} streams it and compares its SHA-256
+     * checksum against the local file. Streaming avoids the Node.js
+     * 2 GiB Buffer limit for large archives.
      *
      * @param remotePath - Full remote path to the file
-     * @returns File content as a Buffer
+     * @returns File content as a Node.js Readable stream
      */
-    download(remotePath: string): Promise<Buffer>;
+    download(remotePath: string): Promise<Readable>;
 
     /**
      * Clean up resources (close connections, release handles).

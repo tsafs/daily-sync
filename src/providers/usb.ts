@@ -191,7 +191,7 @@ export class UsbProvider implements BackupProvider {
      * Real implementation: delegates to `this.delegate.download(remotePath)`.
      * SHA-256 verification works identically to the DiskProvider path.
      */
-    async download(_remotePath: string): Promise<Buffer> {
+    async download(_remotePath: string): Promise<import('node:stream').Readable> {
         throw new Error(
             'UsbProvider.download() is not implemented. ' +
             'Delegate to the internal DiskProvider after initialize() mounts the device.',

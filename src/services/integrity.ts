@@ -1,5 +1,6 @@
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import type { Readable } from 'node:stream';
 import type { BackupProvider } from '../providers/provider.js';
 import { type Logger, createSilentLogger } from './logger.js';
 
@@ -87,11 +88,11 @@ export class IntegrityService {
         localPath: string,
         remotePath: string,
     ): Promise<IntegrityResult> {
-        const localChecksum = await this.computeFileChecksum(localPath);
+        const localChecksum = await this.computeStreamChecksum(createReadStream(localPath));
 
         this.log.debug({ provider: provider.name, remotePath }, 'Verifying upload integrity');
-        const remoteBuffer = await provider.download(remotePath);
-        const remoteChecksum = this.computeBufferChecksum(remoteBuffer);
+        const remoteStream = await provider.download(remotePath);
+        const remoteChecksum = await this.computeStreamChecksum(remoteStream);
 
         if (localChecksum !== remoteChecksum) {
             this.log.error(
@@ -119,24 +120,16 @@ export class IntegrityService {
     // -----------------------------------------------------------------------
 
     /**
-     * Compute the SHA-256 hex digest of a file using a read stream
-     * so that arbitrarily large archives do not exhaust memory.
+     * Compute the SHA-256 hex digest of a Readable stream.
+     * Streams the data in chunks so arbitrarily large archives do not
+     * exhaust memory and the Node.js 2 GiB Buffer limit is never hit.
      */
-    private computeFileChecksum(filePath: string): Promise<string> {
+    private computeStreamChecksum(stream: Readable): Promise<string> {
         return new Promise<string>((resolve, reject) => {
             const hash = createHash('sha256');
-            const stream = createReadStream(filePath);
             stream.on('data', (chunk) => hash.update(chunk as Buffer));
             stream.on('end', () => resolve(hash.digest('hex')));
             stream.on('error', reject);
         });
-    }
-
-    /**
-     * Compute the SHA-256 hex digest of an in-memory Buffer
-     * (used for the downloaded remote content).
-     */
-    private computeBufferChecksum(buffer: Buffer): string {
-        return createHash('sha256').update(buffer).digest('hex');
     }
 }

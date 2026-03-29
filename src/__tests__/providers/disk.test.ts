@@ -188,10 +188,18 @@ describe('DiskProvider', () => {
     });
 
     describe('download()', () => {
+        /** Collect all chunks from a Readable into a single Buffer. */
+        async function collect(remotePath: string): Promise<Buffer> {
+            const stream = await provider.download(remotePath);
+            const chunks: Buffer[] = [];
+            for await (const chunk of stream) chunks.push(chunk as Buffer);
+            return Buffer.concat(chunks);
+        }
+
         it('should return file content as a Buffer', async () => {
             await writeFile(join(targetDir, 'archive.zip'), 'archive-bytes');
 
-            const buffer = await provider.download('archive.zip');
+            const buffer = await collect('archive.zip');
 
             expect(Buffer.isBuffer(buffer)).toBe(true);
             expect(buffer.toString('utf-8')).toBe('archive-bytes');
@@ -201,7 +209,7 @@ describe('DiskProvider', () => {
             await mkdir(join(targetDir, 'sub'));
             await writeFile(join(targetDir, 'sub', 'data.zip'), 'nested-data');
 
-            const buffer = await provider.download('sub/data.zip');
+            const buffer = await collect('sub/data.zip');
 
             expect(buffer.toString('utf-8')).toBe('nested-data');
         });
@@ -210,13 +218,16 @@ describe('DiskProvider', () => {
             const binary = Buffer.from([0x00, 0x01, 0xff, 0xfe]);
             await writeFile(join(targetDir, 'binary.bin'), binary);
 
-            const result = await provider.download('binary.bin');
+            const result = await collect('binary.bin');
 
             expect(result).toEqual(binary);
         });
 
         it('should throw for non-existent files', async () => {
-            await expect(provider.download('missing.zip')).rejects.toThrow();
+            const stream = await provider.download('missing.zip');
+            await expect(
+                (async () => { for await (const _ of stream) { /* drain */ } })(),
+            ).rejects.toThrow();
         });
     });
 
