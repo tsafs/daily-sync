@@ -13,7 +13,11 @@ vi.mock('webdav', () => {
         getDirectoryContents: vi.fn().mockResolvedValue([]),
         deleteFile: vi.fn().mockResolvedValue(undefined),
         createDirectory: vi.fn().mockResolvedValue(undefined),
-        createReadStream: vi.fn().mockReturnValue(Readable.from(Buffer.alloc(0))),
+        // getFileContents is used by download() — createReadStream is intentionally
+        // NOT used because webdav v5 + node-fetch v3 returns a WHATWG web
+        // ReadableStream from response.body, which has no .pipe() method, causing
+        // the PassThrough to end empty (SHA-256 of empty string).
+        getFileContents: vi.fn().mockResolvedValue(Buffer.alloc(0)),
     };
     return {
         createClient: vi.fn(() => mockClient),
@@ -45,7 +49,7 @@ describe('WebDavProvider', () => {
         mockClient.getDirectoryContents.mockResolvedValue([]);
         mockClient.deleteFile.mockResolvedValue(undefined);
         mockClient.createDirectory.mockResolvedValue(undefined);
-        mockClient.createReadStream.mockReturnValue(Readable.from(Buffer.alloc(0)));
+        mockClient.getFileContents.mockResolvedValue(Buffer.alloc(0));
 
         provider = new WebDavProvider(config);
         await provider.initialize();
@@ -196,28 +200,49 @@ describe('WebDavProvider', () => {
             return Buffer.concat(chunks);
         }
 
-        it('should call createReadStream with the resolved remote path', async () => {
+        it('should call getFileContents with the resolved path and binary format', async () => {
             await provider.download('backup/archive.zip');
 
-            expect(mockClient.createReadStream).toHaveBeenCalledWith('/backups/backup/archive.zip');
+            expect(mockClient.getFileContents).toHaveBeenCalledWith(
+                '/backups/backup/archive.zip',
+                { format: 'binary' },
+            );
         });
 
-        it('should stream the file content correctly', async () => {
-            const data = Buffer.from([0x68, 0x65, 0x6c, 0x6c, 0x6f]); // 'hello'
-            mockClient.createReadStream.mockReturnValue(Readable.from(data));
+        it('should NOT use createReadStream (regression: node-fetch v3 web ReadableStream has no .pipe())', async () => {
+            // webdav v5 + node-fetch v3: response.body is a WHATWG web ReadableStream.
+            // createReadStream calls stream.pipe(passThrough) on it — .pipe() doesn't
+            // exist on web streams, so the PassThrough ends empty and SHA-256 returns
+            // the hash of an empty string (e3b0c44...) causing every integrity check to fail.
+            await provider.download('backup/archive.zip');
+
+            expect(mockClient).not.toHaveProperty('createReadStream');
+        });
+
+        it('should return a readable stream containing the file content', async () => {
+            const data = Buffer.from('hello world');
+            mockClient.getFileContents.mockResolvedValue(data);
 
             const result = await collect('file.zip');
 
-            expect(result.toString('utf-8')).toBe('hello');
+            expect(result).toEqual(data);
         });
 
-        it('should propagate errors from createReadStream', async () => {
-            const errStream = new Readable({
-                read() { this.destroy(new Error('not found')); },
-            });
-            mockClient.createReadStream.mockReturnValue(errStream);
+        it('should return the full binary content without truncation', async () => {
+            // Verify non-ASCII / binary data round-trips correctly (not just text)
+            const binary = Buffer.from([0x00, 0xff, 0x7f, 0x80, 0xde, 0xad, 0xbe, 0xef]);
+            mockClient.getFileContents.mockResolvedValue(binary);
 
-            await expect(collect('missing.zip')).rejects.toThrow('not found');
+            const result = await collect('vol.zip.001');
+
+            expect(result).toEqual(binary);
+            expect(result.length).toBe(8);
+        });
+
+        it('should propagate errors from getFileContents', async () => {
+            mockClient.getFileContents.mockRejectedValue(new Error('network error'));
+
+            await expect(collect('missing.zip')).rejects.toThrow('network error');
         });
     });
 

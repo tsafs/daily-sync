@@ -1,6 +1,7 @@
 import { createReadStream } from 'node:fs';
 import { stat } from 'node:fs/promises';
-import { join, posix } from 'node:path';
+import { posix } from 'node:path';
+import { Readable } from 'node:stream';
 import { createClient, type WebDAVClient, type FileStat } from 'webdav';
 import type { BackupProvider, WebDavProviderConfig, RemoteEntry } from './provider.js';
 import { type Logger, createSilentLogger } from '../services/logger.js';
@@ -119,13 +120,18 @@ export class WebDavProvider implements BackupProvider {
         }
     }
 
-    async download(remotePath: string): Promise<import('node:stream').Readable> {
+    async download(remotePath: string): Promise<Readable> {
         const client = this.getClient();
         const fullPath = this.resolvePath(remotePath);
         this.log.debug({ remotePath }, 'Downloading file for integrity check');
-        // createReadStream returns a Node.js PassThrough (a Readable) that streams
-        // the remote file. No in-memory buffer → no 2 GiB limit.
-        return client.createReadStream(fullPath);
+        // Use getFileContents instead of createReadStream. The webdav package's
+        // createReadStream pipes response.body (a WHATWG web ReadableStream from
+        // node-fetch v3) using .pipe(), which doesn't exist on web streams —
+        // resulting in a silent empty PassThrough. getFileContents correctly calls
+        // response.arrayBuffer() and returns a proper Node.js Buffer.
+        const content = await client.getFileContents(fullPath, { format: 'binary' }) as Buffer;
+        this.log.debug({ remotePath, bytes: content.byteLength }, 'Download complete');
+        return Readable.from(content);
     }
 
     async dispose(): Promise<void> {
